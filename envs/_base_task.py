@@ -520,6 +520,31 @@ class Base_Task(gym.Env):
         self.now_obs = deepcopy(pkl_dic)
         return pkl_dic
 
+    def get_obs_fast(self):
+        if self.now_obs is None or len(self.now_obs) == 0:
+            return self.get_obs()
+        import copy
+        pkl_dic = copy.copy(self.now_obs)
+        pkl_dic["observation"] = copy.copy(self.now_obs["observation"])
+        for camera_name in pkl_dic["observation"]:
+            pkl_dic["observation"][camera_name] = copy.copy(self.now_obs["observation"][camera_name])
+        pkl_dic["joint_action"] = copy.copy(self.now_obs["joint_action"])
+        if self.data_type.get("qpos", False):
+            if not self.is_dual_arm:
+                left_jointstate = self.robot.get_left_arm_jointState()
+                pkl_dic["joint_action"]["arm"] = left_jointstate[:-1]
+                pkl_dic["joint_action"]["gripper"] = left_jointstate[-1]
+                pkl_dic["joint_action"]["vector"] = np.array(left_jointstate)
+            else:
+                left_jointstate = self.robot.get_left_arm_jointState()
+                right_jointstate = self.robot.get_right_arm_jointState()
+                pkl_dic["joint_action"]["left_arm"] = left_jointstate[:-1]
+                pkl_dic["joint_action"]["left_gripper"] = left_jointstate[-1]
+                pkl_dic["joint_action"]["right_arm"] = right_jointstate[:-1]
+                pkl_dic["joint_action"]["right_gripper"] = right_jointstate[-1]
+                pkl_dic["joint_action"]["vector"] = np.array(left_jointstate + right_jointstate)
+        return pkl_dic
+
     def save_camera_rgb(self, save_path, camera_name='head_camera'):
         self._update_render()
         self.cameras.update_picture()

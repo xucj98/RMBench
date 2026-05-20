@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange, reduce
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
+from diffusers.schedulers.scheduling_ddim import DDIMScheduler
 
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 from diffusion_policy.policy.base_image_policy import BaseImagePolicy
@@ -82,6 +83,20 @@ class DiffusionUnetImagePolicy(BaseImagePolicy):
         if num_inference_steps is None:
             num_inference_steps = noise_scheduler.config.num_train_timesteps
         self.num_inference_steps = num_inference_steps
+
+    def set_inference_config(self, num_inference_steps=None, use_ddim=False):
+        if use_ddim:
+            old_cfg = self.noise_scheduler.config
+            self.noise_scheduler = DDIMScheduler(
+                num_train_timesteps=old_cfg.num_train_timesteps,
+                beta_start=old_cfg.beta_start,
+                beta_end=old_cfg.beta_end,
+                beta_schedule=old_cfg.beta_schedule,
+                prediction_type=old_cfg.prediction_type,
+                clip_sample=old_cfg.clip_sample,
+            )
+        if num_inference_steps is not None:
+            self.num_inference_steps = num_inference_steps
 
     # ========= inference  ============
     def conditional_sample(

@@ -25,8 +25,10 @@ def get_model(usr_args):
     
     n_obs_steps = model_training_config['n_obs_steps']
     n_action_steps = model_training_config['n_action_steps']
+
+    ddim_steps = usr_args.get('ddim_steps', None)
     
-    return DP(ckpt_file, n_obs_steps=n_obs_steps, n_action_steps=n_action_steps)
+    return DP(ckpt_file, n_obs_steps=n_obs_steps, n_action_steps=n_action_steps, ddim_steps=ddim_steps)
 
 
 def eval(TASK_ENV, model, observation):
@@ -43,7 +45,7 @@ def eval(TASK_ENV, model, observation):
 
     for action in actions:
         TASK_ENV.take_action(action)
-        observation = TASK_ENV.get_obs()
+        observation = TASK_ENV.get_obs_fast()
         obs = encode_obs(observation)
         model.update_obs(obs)
 
