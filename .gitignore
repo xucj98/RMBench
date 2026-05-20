@@ -1,3 +1,14 @@
+assets/
+data/
+logs/
+eval_result
+task_videos
+policy/DP/checkpoints
+policy/DP/data
+policy/Mem-0/assets
+policy/Mem-0/lerobot_datasets
+
+
 models/
 !policy/Mem-0/source/models
 data/*

@@ -98,6 +98,7 @@ class Base_Task(gym.Env):
         self.now_obs = {}
         self.take_action_cnt = 0
         self.eval_video_path = kwags.get("eval_video_save_dir", None)
+        self.eval_video_ffmpeg = None
 
         self.save_freq = kwags.get("save_freq")
         self.world_pcd = None
@@ -1527,7 +1528,7 @@ class Base_Task(gym.Env):
             return
 
         eval_video_freq = 1  # fixed
-        if (self.eval_video_path is not None and self.take_action_cnt % eval_video_freq == 0):
+        if (self.eval_video_path is not None and self.eval_video_ffmpeg is not None and self.take_action_cnt % eval_video_freq == 0):
             # self.eval_video_ffmpeg.stdin.write(self.now_obs["observation"]["head_camera"]["rgb"].tobytes())
             self.eval_video_ffmpeg.stdin.write(self.now_obs["third_view_rgb"].tobytes())
 
@@ -1715,7 +1716,7 @@ class Base_Task(gym.Env):
             if self.check_success():
                 self.eval_success = True
                 self.get_obs() # update obs
-                if (self.eval_video_path is not None):
+                if (self.eval_video_path is not None and self.eval_video_ffmpeg is not None):
                     self.eval_video_ffmpeg.stdin.write(self.now_obs["third_view_rgb"].tobytes())
                 return
 

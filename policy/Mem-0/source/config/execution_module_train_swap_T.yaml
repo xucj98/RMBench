@@ -1,0 +1,94 @@
+seed: 42
+wandb_entity: null
+wandb_project: Mem-0
+is_debug: false
+execution_module:
+  qwen_vl:
+    model_path: ./checkpoints/Qwen3-VL-2B-Instruct
+    system_prompt: null
+  memory_bank:
+    window_size: 30
+    initial_anchor_size: 1
+    num_heads: 8
+    dropout: 0.1
+    memory_accumulation: 8
+  action_model:
+    action_model_type: DiT-B
+    hidden_size: 2048
+    add_pos_embed: true
+    max_seq_len: 1024
+    action_dim: 14
+    state_dim: 14
+    action_horizon: 30
+    repeated_diffusion_steps: 8
+    noise_beta_alpha: 1.5
+    noise_beta_beta: 1.0
+    noise_s: 0.999
+    num_timestep_buckets: 1000
+    num_inference_timesteps: 8
+    diffusion_model_cfg:
+      cross_attention_dim: 2048
+      dropout: 0.2
+      final_dropout: true
+      interleave_self_attention: true
+      norm_type: ada_norm
+      num_layers: 16
+      output_dim: 2048
+      positional_embeddings: null
+  classifier:
+    hidden_sizes:
+    - 6144
+    - 2048
+    - 512
+    dropout: 0.1
+    pos_weight: 10.0
+    focal_gamma: 1.0
+    threshold: 0.5
+  loss_weights:
+    lambda_action: 1.0
+    lambda_classifier: 0.2
+dataloader:
+  type: rmbench_random_episode
+  num_workers: 2
+  shuffle_episodes: true
+  seed: 42
+  infinite: true
+  norm_stats_path: ./assets/swap_T/norm_stats.json
+trainer:
+  wandb_run_name: swap_T_execution
+  resume: null
+  batch_size: 56
+  train_steps: 30000
+  eval_action_interval: 100
+  log_interval: 10
+  classifier_metrics_window_size: 20
+  enable_wandb: false
+  checkpoint_dir: ./checkpoints/swap_T_execution
+  save_every_steps: 1000
+  save_final: true
+  scheduler: cosine
+  warmup_ratio: 0.05
+  grad_clip_norm: 2.5
+  weight_decay: 0.005
+  learning_rate:
+    base: 1.0e-05
+    qwen_model: 1.0e-05
+    action_model: 0.0001
+    classifier: 0.0001
+  min_lr:
+    base: 1.0e-06
+    qwen_model: 1.0e-06
+    action_model: 5.0e-06
+    classifier: 5.0e-06
+  freeze_modules: ''
+  download_videos: false
+vla_dataset:
+  RMBench:
+    repo_id: ./lerobot_datasets/swap_T
+    features_to_load:
+    - observation.state
+    - action
+    - subtask
+    - subtask_end
+    - episode_id
+    - observation.image.head_camera
