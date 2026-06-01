@@ -458,7 +458,7 @@ class TrainConfig:
     # Name of the config. Must be unique. Will be used to reference this config.
     name: tyro.conf.Suppress[str]
     # Project name.
-    project_name: str = "openpi"
+    project_name: str = "RMBench"
     # Experiment name. Will be used to name the metadata and checkpoint directories.
     exp_name: str = tyro.MISSING
 
@@ -504,9 +504,9 @@ class TrainConfig:
     # How often (in steps) to log training metrics.
     log_interval: int = 100
     # How often (in steps) to save checkpoints.
-    save_interval: int = 1000
+    save_interval: int = 10000
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
-    keep_period: int | None = 5000
+    keep_period: int | None = None
 
     # If true, will overwrite the checkpoint directory if it already exists.
     overwrite: bool = False
@@ -547,6 +547,45 @@ class TrainConfig:
             raise ValueError("Cannot resume and overwrite at the same time.")
 
 
+_ROBOTWIN_ALOHA_REPACK = _transforms.Group(inputs=[
+    _transforms.RepackTransform({
+        "images": {
+            "cam_high": "observation.images.cam_high",
+            "cam_left_wrist": "observation.images.cam_left_wrist",
+            "cam_right_wrist": "observation.images.cam_right_wrist",
+        },
+        "state": "observation.state",
+        "actions": "action",
+        "prompt": "prompt",
+    })
+])
+
+
+def _robotwin_aloha_data(repo_id: str) -> LeRobotAlohaDataConfig:
+    return LeRobotAlohaDataConfig(
+        repo_id=repo_id,
+        adapt_to_pi=False,
+        repack_transforms=_ROBOTWIN_ALOHA_REPACK,
+        base_config=DataConfig(
+            prompt_from_task=True,
+        ),
+    )
+
+
+def _pi0_robotwin_lora_config(name: str, repo_id: str) -> TrainConfig:
+    model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
+    return TrainConfig(
+        name=name,
+        model=model,
+        data=_robotwin_aloha_data(repo_id),
+        freeze_filter=model.get_freeze_filter(),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+        fsdp_devices=1,
+    )
+
+
 # Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
     ###
@@ -557,7 +596,7 @@ _CONFIGS = [
         name="pi05_aloha_full_base",
         model=pi0_config.Pi0Config(pi05=True),
         data=LeRobotAlohaDataConfig(
-            repo_id="your_repo_id",
+            repo_id="swap_blocks_demo_clean",
             repack_transforms=_transforms.Group(inputs=[
                 _transforms.RepackTransform({
                     "images": {
@@ -576,9 +615,12 @@ _CONFIGS = [
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
         num_train_steps=20_000,
-        batch_size=64,
-        fsdp_devices=1,  # refer line 359
+        batch_size=32,
+        fsdp_devices=2,  # refer line 359
     ),
+    _pi0_robotwin_lora_config("pi0_aloha_swap_blocks_lora", "swap_blocks_demo_clean"),
+    _pi0_robotwin_lora_config("pi0_aloha_swap_T_lora", "swap_T_demo_clean"),
+    _pi0_robotwin_lora_config("pi0_aloha_put_back_block_lora", "put_back_block_demo_clean"),
     # pi0_base by lora
     TrainConfig(
         name="pi0_base_aloha_robotwin_lora",

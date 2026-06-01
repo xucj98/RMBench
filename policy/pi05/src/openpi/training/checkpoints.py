@@ -9,7 +9,7 @@ from typing import Protocol
 from etils import epath
 import jax
 import orbax.checkpoint as ocp
-import orbax.checkpoint.future as future
+import orbax.checkpoint._src.futures.future as future
 
 from openpi.shared import array_typing as at
 import openpi.shared.normalize as _normalize
@@ -45,7 +45,7 @@ def initialize_checkpoint_dir(
             "params": ocp.PyTreeCheckpointHandler(),
         },
         options=ocp.CheckpointManagerOptions(
-            max_to_keep=1,
+            max_to_keep=2,
             keep_period=keep_period,
             create=False,
             async_options=ocp.AsyncOptions(timeout_secs=7200),

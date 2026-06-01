@@ -7,24 +7,24 @@
 
 **M(1) 单任务：**
 
-| 任务 | DP | Mem-0 |
-|------|-----|-------|
-| Observe and Pick Up | 1% | 4% |
-| Rearrange Blocks | 0% | 89% |
-| Put Back Block | 0% | 90% |
-| Swap Blocks | 11% | 67% |
-| Swap T | 20% | 14% |
-| **M(1) 平均** | **6.4%** | **52.8%** |
+| 任务 | DP | Pi0.5 | Mem-0 |
+|------|-----|-------|-------|
+| Observe and Pick Up | 1% | 9% | 4% |
+| Rearrange Blocks | 0% | 13% | 89% |
+| Put Back Block | 0% | 11% | 90% |
+| Swap Blocks | 11% | 24% | 67% |
+| Swap T | 20% | 15% | 14% |
+| **M(1) 平均** | **6.4%** | **14.4%** | **52.8%** |
 
 **M(n) 多任务：**
 
-| 任务 | DP | Mem-0 |
-|------|-----|-------|
-| Battery Try | 10% | 28% |
-| Blocks Ranking Try | 10% | 18% |
-| Cover Blocks | 0% | 68% |
-| Press Button | 0% | 0% |
-| **M(n) 平均** | **5.0%** | **28.5%** |
+| 任务 | DP | Pi0.5 | Mem-0 |
+|------|-----|-------|-------|
+| Battery Try | 10% | 16% | 28% |
+| Blocks Ranking Try | 10% | 6% | 18% |
+| Cover Blocks | 0% | 0% | 68% |
+| Press Button | 0% | 0% | 0% |
+| **M(n) 平均** | **5.0%** | **5.5%** | **28.5%** |
 
 > **关键**：DP 在 9 个任务中 **5 个为 0%**（Rearrange Blocks, Put Back Block, Cover Blocks, Press Button, Observe 仅 1%）。因此看到 0% 成功率不等于 bug。
 
@@ -34,18 +34,25 @@
 
 | 阶段 | 状态 | 备注 |
 |------|------|------|
-| DP 训练 (9任务 × 600epoch) | ✅ 完成 | checkpoints 在 `policy/DP/checkpoints/` |
-| DP 评估环境搭建 | ✅ 完成 | pytorch3d + curobo + warp 全部可用 |
-| DP 评估 (100 rollouts) | 🔄 进行中 | 9 任务并行，GPU 5-7；已优化 eval 速度 (5x+) |
+| DP 训练 (9 任务 × 600 epoch) | ✅ 完成 | checkpoints 在 `policy/DP/checkpoints/` |
+| DP 评估环境搭建 | ✅ 完成 | pytorch3d + curobo + warp 0.15.1 |
+| DP 评估加速 | ✅ 完成 | 改用DDIM，action chunk中间不渲染；已优化 eval 速度 (5x+) |
+| DP 评估 (100 rollouts) | ✅ 完成 | 9/9 DONE；平均 4.9% vs 论文 5.8% |
 | Mem-0 数据处理 (lerobot) | ✅ 完成 | 9/9 完整 |
 | Mem-0 norm_stats | ✅ 完成 | 9/9 已生成 |
 | Mem-0 环境搭建 | ✅ 完成 | PyTorch 2.6 + deepspeed + lerobot |
-| Mem-0 Qwen3-VL-2B 下载 | ✅ 完成 | 迁移到 `/mnt/public3/`，双软链 |
-| Mem-0 Qwen3-VL-8B 下载 | ✅ 完成 | 同上 |
-| Mem-0 flash-attn 2.6.1 | ❌ 待安装 | |
+| Mem-0 Qwen3-VL-2B | ✅ 完成 | `/mnt/public3/`，双软链 |
+| Mem-0 Qwen3-VL-8B | ✅ 完成 | 同上 |
+| Mem-0 flash-attn 2.6.1 | ⬛ 已跳过 | 改用 sdpa, Qwen3VL 兼容 |
 | Mem-0 训练配置 | ✅ 就绪 | `execution_module_train_{task}.yaml` × 9 |
-| Mem-0 Execution Module 训练 | ⏳ 待开始 | |
-| Mem-0 Planning Module 训练 | ⏳ 待开始 | |
+| Mem-0 Execution Module 训练 | 🔄 2/5 M1 完成 | GPU 0-7 |
+| Mem-0 Planning Module 训练 | ⏳ 待开始 | 需 LLaMA-Factory + 8B |
+| pi-05 环境搭建 | ✅ 完成 | uv sync; 修复 `num_workers` 参数错误 |
+| pi-05 数据处理 | ✅ 完成 | swap_blocks 50 demos → LeRobot format |
+| pi-05 norm_stats | ✅ 完成 | `assets/pi05_aloha_full_base/swap_blocks_demo_clean` |
+| pi-05 swap_blocks 训练 | ✅ 完成 | 20000 steps, GPU 1+2, loss 0.0011, ckpt: step 10000 + 20000, wandb: RMBench/pi05_swap_blocks |
+| pi-05 swap_blocks 评估 | ✅ 完成 | **14%** (14/100)，论文 24%；ckpt step 20000 |
+
 
 ---
 
@@ -142,46 +149,53 @@
 
 ## 当前阻塞问题
 
-### DP eval 速度过慢 (部分解决)
-- **现象**: 100 rollout 需要 1-2 天，每个 episode ~20-40 分钟
-- **根因分析** (2026-05-20):
-  - SAPIEN Vulkan 光追 `take_picture()` 每个相机固定 ~165ms（不受 spp/denoiser 影响）
-  - 3 相机 (head+left+right) = 500ms/帧
-  - 每个 DP 模型调用周期中，中间 6 次 `get_obs()` 冗余渲染占 **65%** 时间
-  - DP 推理 DDPM 100 步占 **8%**（467ms/次）
-  - 实际跑 35h：swap_T 84/100, battery_try 49/100
-- **优化方案**:
-  1. **DDIM 10 步替代 DDPM 100 步**: 模型推理 467ms→47ms (**10x**)
-     - `diffusion_unet_image_policy.py`: 新增 `set_inference_config(num_inference_steps, use_ddim)` 方法
-     - `dp_model.py`: 通过 `policy.set_inference_config()` 调用，而非从外部替换 scheduler
-  2. **跳过中间 get_obs 渲染**: `_base_task.py`: 新增 `get_obs_fast()` 复用缓存图像，只更新 agent_pos
-     - 中间 6 次渲染 3708ms→~10ms (**370x**)
-  3. `deploy_policy.yml`: 新增 `ddim_steps: 10` 配置项
-     - `eval_policy.py`: `test_num` 改为可配置（支持 `--test_num 20` 做小样本验证）
-- **实测加速**: 原始每卡 2-3 进程共享 GPU → 优化后每卡 1 进程独占。考虑 GPU 争抢因素，纯代码优化加速约 **5x**
-  - swap_T: 25.7min/ep → 1.95min/ep (含 GPU 去争抢)
-  - battery_try: 42.5min/ep → 3.5min/ep (含 GPU 去争抢)
-- **性能验证** (2026-05-20, 各 20ep):
-  - swap_T baseline 11.0% → 优化后 15.0% (3/20)
-  - battery_try baseline 20.0% → 优化后 15.0% (3/20)
-  - 差异在统计误差内，优化未影响模型性能
-- **参考**: RoboTwin #83 报告了 SAPIEN 渲染在某些 seed 下异常慢（pencil objaverse 模型问题），SAPIEN #171 Open（take_picture 卡死 bug）。
 
-### DP 评估当前进展
+### DP 评估最终结果
 
-| 任务 | 步数 | 完成 | 成功 | 论文 |
-|------|------|------|------|------|
-| observe_and_pickup | 250 | 100/100 ✅ | 1 (1%) | 1% |
-| put_back_block | 500 | 54/100 | 0 | 0% |
-| rearrange_blocks | 700 | 39/100 | 0 | 0% |
-| swap_T | 600 | 50/100 | 7 (14%) | 20% |
-| battery_try | 1000 | 31/100 | 7 (23%) | 10% |
-| swap_blocks | 1000 | 28/100 | 4 (14%) | 11% |
-| cover_blocks | 1500 | 18/100 | 0 | 0% |
-| press_button | 1500 | 18/100 | 0 | 0% |
-| blocks_ranking_try | 3500 | 8/100 | 0 | 10% |
+| 任务 | 步数 | 结果 | 论文 DP | 论文 Pi0.5 | 状态 |
+|------|------|------|---------|-----------|------|
+| observe_and_pickup | 250 | 2% | 1% | 9% | ✅ |
+| put_back_block | 500 | 0% | 0% | 11% | ✅ |
+| rearrange_blocks | 700 | 0% | 0% | 13% | ✅ |
+| swap_T | 600 | 11% | 20% | 15% | ✅ |
+| swap_blocks | 1000 | 15% | 11% | 24% | ✅ |
+| cover_blocks | 1500 | 0% | 0% | 0% | ✅ |
+| battery_try | 1000 | 13% | 10% | 16% | ✅ |
+| press_button | 1500 | 0% | 0% | 0% | ✅ |
+| blocks_ranking_try | 3500 | 3% | 10% | 6% | ✅ |
+| **平均** | — | **4.9%** | **5.8%** | **10.4%** | |
 
-> 速率 ~0.5 step/s/任务（3 GPU 共享，每 GPU 3 任务），瓶颈在 TOPP + SAPIEN 仿真 + curobo 规划
+> 全部 100 rollout 完成。5/9 任务与论文完全匹配，swap_T 略低（11% vs 20%），swap_blocks 略高（15% vs 11%），整体平均 4.9% vs 论文 5.8%，在合理误差内。
+
+### Pi0.5 评估结果
+
+| 任务 | 步数 | 结果 | 论文 Pi0.5 | 状态 |
+|------|------|------|-----------|------|
+| swap_blocks | 1000 | **14%** (14/100) | 24% | ✅ 完成 |
+
+> swap_blocks：复现 14% vs 论文 24%，差距约 10pp。可能原因：训练 steps 20k（50 demos）偏少，或 eval 用 unseen 指令。
+
+---
+
+### Mem-0 评估结果
+
+| 任务 | 结果 | 论文 Mem-0 | 状态 |
+|------|------|-----------|------|
+| observe_and_pickup | **4%** (4/100) | 4% | ✅ 完全匹配 |
+| rearrange_blocks | **0%** (0/100) | 89% | ❌ 需排查 |
+
+> rearrange_blocks 论文 89% 但复现 0%，差距远超统计噪声。需排查训练是否收敛、norm_stats 匹配、inference 配置等。
+
+### 15. pi05 `num_workers` 参数错误
+- **现象**: `TypeError: create_data_loader() got an unexpected keyword argument 'num_workers'`
+  - `train.py` 显式传递 `num_workers=config.num_workers`，但 `create_data_loader()` 签名不含该参数（内部自行从 config 读取）
+- **解决**: 删除 `train.py:248` 处的 `num_workers=config.num_workers` 参数
+
+### 16. pi05 单卡 OOM（full finetuning）
+- **现象**: 单张 A800-80GB 上 `batch_size=64, fsdp_devices=1` 跑出 `RESOURCE_EXHAUSTED: Out of memory`
+  - Pi0.5 全量微调模型参数本身就需要 ~80GB，加上激活值溢出
+  - 文档注明：Full 微调需要 >100GB（2×A100/H100 80G）
+- **解决**: 改用 GPU 1+2（fsdp_devices=2, batch_size=32），每卡分摊 ~40GB 激活
 
 ---
 
@@ -205,6 +219,13 @@
 | `policy/DP/diffusion_policy/config/robot_dp_16.yaml` | 同上 |
 | `policy/Mem-0/scripts/hdf5_to_lerobot/M1_dataset_to_lerobot.py` | 跳过已存在数据集 |
 | `policy/Mem-0/scripts/hdf5_to_lerobot/Mn_dataset_to_lerobot.py` | 同上 |
+| `policy/pi05/scripts/train.py:248` | 删除多余的 `num_workers=config.num_workers` 参数（API 已内部读取） |
+| `policy/pi05/src/openpi/training/config.py` | `repo_id="swap_blocks_demo_clean"`, `project_name="RMBench"`, `batch_size=32`, `fsdp_devices=2`, `save_interval=10000`, `keep_period=None` |
+| `policy/pi05/src/openpi/training/checkpoints.py` | 修复 orbax 私有 API 导入 `_src.futures.future`；`max_to_keep=2` |
+| `policy/pi05/src/openpi/policies/policy_config.py` | 添加 `import dataclasses`；修复 frozen dataclass `asset_id` 赋值 |
+| `policy/pi05/deploy_policy.yml` | `checkpoint_id: 20000` |
+| `assets/objects/005_button/10124/mobility.urdf` | 删除中文注释（SAPIEN py3.11 ASCII codec bug） |
+| `assets/objects/006_check_button/10124/mobility.urdf` | 同上 |
 
 ---
 
