@@ -73,8 +73,40 @@ class put_back_block(Base_Task):
         self.target_pose = self.mat_lst[block_id].get_pose().p
         self.center_pose = [0.1,-0.1,0.765,1,0,0,0]
         self.stage_id = 0
+
+    @staticmethod
+    def _vec_to_list(vec):
+        return [float(x) for x in np.asarray(vec).reshape(-1)]
+
+    def _pose_to_dict(self, pose):
+        return {
+            "p": self._vec_to_list(pose.p),
+            "q": self._vec_to_list(pose.q),
+        }
+
+    def _build_episode_info(self):
+        mat_names = ['left', 'right', 'front', 'back']
+        return {
+            "origin_mat_id": int(mat_names.index(self.mat_name)),
+            "origin_mat_name": self.mat_name,
+            "block_half_size": float(self.block_half_size),
+            "initial_block_pose": self._pose_to_dict(self.block.get_pose()),
+            "target_pose": self._vec_to_list(self.target_pose),
+            "center_pose": self._vec_to_list(self.center_pose),
+            "mat_poses": {
+                name: self._pose_to_dict(mat.get_pose())
+                for name, mat in zip(mat_names, self.mat_lst)
+            },
+            "button_pose": self._pose_to_dict(self.button.get_pose()),
+            "phase_sequence": [
+                "move_block_to_center",
+                "press_button",
+                "move_block_back_to_origin_mat",
+            ],
+        }
     
     def play_once(self):
+        episode_info = self._build_episode_info()
         self.move(self.grasp_actor(self.block,arm_tag="right",pre_grasp_dis=0.1, grasp_dis=0.02), language_annotation=f'Pick up the block and move it to the center position.')
         self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Pick up the block and move it to the center position.')
         self.move(self.place_actor(self.block, arm_tag="right", target_pose=self.center_pose, functional_point_id=2, dis=0.02), language_annotation=f'Pick up the block and move it to the center position.')
@@ -84,7 +116,8 @@ class put_back_block(Base_Task):
         self.move(self.grasp_actor(self.block,arm_tag="right",pre_grasp_dis=0.02, grasp_dis=0.02), language_annotation=f'Move the block back to the {self.mat_name} mat.')
         self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Move the block back to the {self.mat_name} mat.')
         self.move(self.place_actor(self.block, arm_tag="right", target_pose=self.target_pose, functional_point_id=2, dis=0.01), language_annotation=f'Move the block back to the {self.mat_name} mat.')
-        self.info["info"] = {}
+        episode_info["final_block_pose"] = self._pose_to_dict(self.block.get_pose())
+        self.info["info"] = episode_info
         return self.info
         
     def press_button(self):

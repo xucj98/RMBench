@@ -8,6 +8,13 @@ import yaml
 
 current_file_path = os.path.abspath(__file__)
 parent_directory = os.path.dirname(current_file_path)
+project_root = os.path.abspath(os.path.join(parent_directory, "../.."))
+
+
+def resolve_collection_dir(task_name: str, setting: str, save_path: str) -> str:
+    """Return the directory where collect_data.py wrote this task setting."""
+    base_dir = save_path if os.path.isabs(save_path) else os.path.join(project_root, save_path)
+    return os.path.abspath(os.path.join(base_dir, task_name, setting))
 
 
 def extract_placeholders(instruction: str) -> List[str]:
@@ -26,6 +33,9 @@ def filter_instructions(instructions: List[str], episode_params: Dict[str, str])
 
     for instruction in instructions:
         placeholders = extract_placeholders(instruction)
+        if not placeholders:
+            filtered_instructions.append(instruction)
+            continue
         # Remove {} from episode_params keys for comparison
         stripped_episode_params = {key.strip("{}"): value for key, value in episode_params.items()}
 
@@ -52,9 +62,13 @@ def replace_placeholders(instruction: str, episode_params: Dict[str, str]) -> st
     # Remove {} from episode_params keys for replacement
     stripped_episode_params = {key.strip("{}"): value for key, value in episode_params.items()}
 
-    for key, value in stripped_episode_params.items():
+    for key in extract_placeholders(instruction):
+        if key not in stripped_episode_params:
+            continue
+        value = stripped_episode_params[key]
         placeholder = "{" + key + "}"
         # Check if the value contains '\' or '/'
+        value = str(value)
         if "\\" in value or "/" in value:
             json_path = os.path.join(
                 os.path.join(parent_directory, "../objects_description"),
@@ -92,9 +106,13 @@ def replace_placeholders_unseen(instruction: str, episode_params: Dict[str, str]
     # Remove {} from episode_params keys for replacement
     stripped_episode_params = {key.strip("{}"): value for key, value in episode_params.items()}
 
-    for key, value in stripped_episode_params.items():
+    for key in extract_placeholders(instruction):
+        if key not in stripped_episode_params:
+            continue
+        value = stripped_episode_params[key]
         placeholder = "{" + key + "}"
         # Check if the value contains '\' or '/'
+        value = str(value)
         if "\\" in value or "/" in value:
             json_path = os.path.join(
                 os.path.join(parent_directory, "../objects_description"),
@@ -136,9 +154,9 @@ def load_task_instructions(task_name: str) -> Dict[str, Any]:
     return task_data
 
 
-def load_scene_info(task_name: str, setting: str, scene_info_path: str) -> Dict[str, Dict]:
+def load_scene_info(task_name: str, setting: str, save_path: str) -> Dict[str, Dict]:
     """Load the scene info from the JSON file in the data directory."""
-    file_path = os.path.join(parent_directory, f"../../{scene_info_path}/{task_name}/{setting}/scene_info.json")
+    file_path = os.path.join(resolve_collection_dir(task_name, setting, save_path), "scene_info.json")
     try:
         with open(file_path, "r") as f:
             scene_data = json.load(f)
@@ -162,9 +180,9 @@ def extract_episodes_from_scene_info(scene_info: Dict) -> List[Dict[str, str]]:
     return episodes
 
 
-def save_episode_descriptions(task_name: str, setting: str, generated_descriptions: List[Dict]):
+def save_episode_descriptions(task_name: str, setting: str, save_path: str, generated_descriptions: List[Dict]):
     """Save generated descriptions to output files."""
-    output_dir = os.path.join(parent_directory, f"../../data/{task_name}/{setting}/instructions")
+    output_dir = os.path.join(resolve_collection_dir(task_name, setting, save_path), "instructions")
     os.makedirs(output_dir, exist_ok=True)
 
     for episode_desc in generated_descriptions:
@@ -271,5 +289,5 @@ if __name__ == "__main__":
     results = generate_episode_descriptions(args.task_name, episodes, args.max_num)
     
     # Save results to output files
-    save_episode_descriptions(args.task_name, args.setting, results)
+    save_episode_descriptions(args.task_name, args.setting, args_dict['save_path'], results)
     print("Successfully Saved Instructions")
