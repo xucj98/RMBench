@@ -32,6 +32,14 @@ policy/pi05/src/openpi/
 
 不要为了 RMBench 的目录偏好重构上游 package。
 
+## Git 与提交语言
+
+RMBench 当前默认使用中文 commit message，优先服务于本项目主要开发者的回看、审阅和实验溯源。
+
+如果 commit 面向上游开源库、英文 issue/PR、英文协作者，或需要进入外部社区，则使用英文。
+
+Commit message 结构仍遵循通用代码规范；只是语言默认使用中文。
+
 ## 共享存储入口
 
 RMBench workspace 下应维护一个共享存储入口：
