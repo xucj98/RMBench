@@ -40,3 +40,5 @@ envs/curobo/*
 
 /*.json*
 /*.txt
+/RMBench_arxiv_2603.01229.pdf
+/storage
