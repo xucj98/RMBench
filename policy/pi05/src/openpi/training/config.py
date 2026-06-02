@@ -278,6 +278,34 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 
 
 @dataclasses.dataclass(frozen=True)
+class LeRobotAlohaKeyStateDataConfig(LeRobotAlohaDataConfig):
+    """ALOHA LeRobot config for datasets with key-state dims after the 14 robot dims."""
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        data_transforms = _transforms.Group(
+            inputs=[aloha_policy.KeyStateAlohaInputs(adapt_to_pi=self.adapt_to_pi)],
+            outputs=[aloha_policy.KeyStateAlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
+        )
+        if self.use_delta_joint_actions:
+            delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
+
+        model_transforms = ModelTransformFactory(default_prompt=self.default_prompt)(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=self.repack_transforms,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            action_sequence_keys=self.action_sequence_keys,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class LeRobotLiberoDataConfig(DataConfigFactory):
     """
     This config is used to configure transforms that are applied at various parts of the data pipeline.
@@ -572,6 +600,17 @@ def _robotwin_aloha_data(repo_id: str) -> LeRobotAlohaDataConfig:
     )
 
 
+def _robotwin_aloha_key_state_data(repo_id: str) -> LeRobotAlohaKeyStateDataConfig:
+    return LeRobotAlohaKeyStateDataConfig(
+        repo_id=repo_id,
+        adapt_to_pi=False,
+        repack_transforms=_ROBOTWIN_ALOHA_REPACK,
+        base_config=DataConfig(
+            prompt_from_task=True,
+        ),
+    )
+
+
 def _pi0_robotwin_lora_config(name: str, repo_id: str) -> TrainConfig:
     model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
     return TrainConfig(
@@ -583,6 +622,21 @@ def _pi0_robotwin_lora_config(name: str, repo_id: str) -> TrainConfig:
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
         fsdp_devices=1,
+    )
+
+
+def _pi0_robotwin_key_state_lora_config(name: str, repo_id: str, variant: dict[str, Any]) -> TrainConfig:
+    model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
+    return TrainConfig(
+        name=name,
+        model=model,
+        data=_robotwin_aloha_key_state_data(repo_id),
+        freeze_filter=model.get_freeze_filter(),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+        fsdp_devices=1,
+        policy_metadata={"key_state_variant": variant},
     )
 
 
@@ -621,6 +675,105 @@ _CONFIGS = [
     _pi0_robotwin_lora_config("pi0_aloha_swap_blocks_lora", "swap_blocks_demo_clean"),
     _pi0_robotwin_lora_config("pi0_aloha_swap_T_lora", "swap_T_demo_clean"),
     _pi0_robotwin_lora_config("pi0_aloha_put_back_block_lora", "put_back_block_demo_clean"),
+    _pi0_robotwin_key_state_lora_config(
+        "pi0_aloha_put_back_block_key_state_default_lora",
+        "put_back_block_demo_clean_key_state_default",
+        {
+            "phase_input_policy": "gt",
+            "mat_input_policy": "unknown_until_wmat_end",
+            "wmat_margin_frames": 0,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 0,
+            "phase_lag_recovery": False,
+        },
+    ),
+    _pi0_robotwin_key_state_lora_config(
+        "pi0_aloha_put_back_block_key_state_mat_first_lora",
+        "put_back_block_demo_clean_key_state_mat_first",
+        {
+            "phase_input_policy": "gt",
+            "mat_input_policy": "unknown_first_frame_only",
+            "wmat_margin_frames": 0,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 0,
+            "phase_lag_recovery": False,
+        },
+    ),
+    _pi0_robotwin_key_state_lora_config(
+        "pi0_aloha_put_back_block_key_state_mat_hash_p50_lora",
+        "put_back_block_demo_clean_key_state_mat_hash_p50",
+        {
+            "phase_input_policy": "gt",
+            "mat_input_policy": "early_hash_mix",
+            "mat_unknown_prob": 0.5,
+            "wmat_margin_frames": 0,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 0,
+            "phase_lag_recovery": False,
+        },
+    ),
+    _pi0_robotwin_key_state_lora_config(
+        "pi0_aloha_put_back_block_key_state_wmat_margin10_lora",
+        "put_back_block_demo_clean_key_state_wmat_margin10",
+        {
+            "phase_input_policy": "gt",
+            "mat_input_policy": "unknown_until_wmat_end",
+            "wmat_margin_frames": 10,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 0,
+            "phase_lag_recovery": False,
+        },
+    ),
+    _pi0_robotwin_key_state_lora_config(
+        "pi0_aloha_put_back_block_key_state_wmat_margin20_lora",
+        "put_back_block_demo_clean_key_state_wmat_margin20",
+        {
+            "phase_input_policy": "gt",
+            "mat_input_policy": "unknown_until_wmat_end",
+            "wmat_margin_frames": 20,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 0,
+            "phase_lag_recovery": False,
+        },
+    ),
+    _pi0_robotwin_key_state_lora_config(
+        "pi0_aloha_put_back_block_key_state_phase_lag10_lora",
+        "put_back_block_demo_clean_key_state_phase_lag10",
+        {
+            "phase_input_policy": "lag_after_boundary",
+            "phase_lag_recovery": True,
+            "lag_window_frames": 10,
+            "mat_input_policy": "unknown_until_wmat_end",
+            "wmat_margin_frames": 0,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 0,
+        },
+    ),
+    _pi0_robotwin_key_state_lora_config(
+        "pi0_aloha_put_back_block_key_state_phase_lag20_lora",
+        "put_back_block_demo_clean_key_state_phase_lag20",
+        {
+            "phase_input_policy": "lag_after_boundary",
+            "phase_lag_recovery": True,
+            "lag_window_frames": 20,
+            "mat_input_policy": "unknown_until_wmat_end",
+            "wmat_margin_frames": 0,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 0,
+        },
+    ),
+    _pi0_robotwin_key_state_lora_config(
+        "pi0_aloha_put_back_block_key_state_phase_jitter5_lora",
+        "put_back_block_demo_clean_key_state_phase_jitter5",
+        {
+            "phase_input_policy": "gt",
+            "mat_input_policy": "unknown_until_wmat_end",
+            "wmat_margin_frames": 0,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 5,
+            "phase_lag_recovery": False,
+        },
+    ),
     # pi0_base by lora
     TrainConfig(
         name="pi0_base_aloha_robotwin_lora",

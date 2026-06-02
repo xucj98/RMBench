@@ -101,6 +101,73 @@ class AlohaOutputs(transforms.DataTransformFn):
         return {"actions": _encode_actions(actions, adapt_to_pi=self.adapt_to_pi)}
 
 
+@dataclasses.dataclass(frozen=True)
+class KeyStateAlohaInputs(transforms.DataTransformFn):
+    """Aloha inputs that preserve key-state dimensions after the first 14 robot dims."""
+
+    adapt_to_pi: bool = True
+
+    EXPECTED_CAMERAS: ClassVar[tuple[str, ...]] = AlohaInputs.EXPECTED_CAMERAS
+
+    def __call__(self, data: dict) -> dict:
+        robot_state, key_state = _split_robot_key_state(np.asarray(data["state"]))
+        data = {**data, "state": robot_state}
+        data = _decode_aloha(data, adapt_to_pi=self.adapt_to_pi)
+        data["state"] = _join_robot_key_state(data["state"], key_state)
+
+        in_images = data["images"]
+        if set(in_images) - set(self.EXPECTED_CAMERAS):
+            raise ValueError(f"Expected images to contain {self.EXPECTED_CAMERAS}, got {tuple(in_images)}")
+
+        base_image = in_images["cam_high"]
+        images = {
+            "base_0_rgb": base_image,
+        }
+        image_masks = {
+            "base_0_rgb": np.True_,
+        }
+
+        extra_image_names = {
+            "left_wrist_0_rgb": "cam_left_wrist",
+            "right_wrist_0_rgb": "cam_right_wrist",
+        }
+        for dest, source in extra_image_names.items():
+            if source in in_images:
+                images[dest] = in_images[source]
+                image_masks[dest] = np.True_
+            else:
+                images[dest] = np.zeros_like(base_image)
+                image_masks[dest] = np.False_
+
+        inputs = {
+            "image": images,
+            "image_mask": image_masks,
+            "state": data["state"],
+        }
+
+        if "actions" in data:
+            robot_actions, key_actions = _split_robot_key_state(np.asarray(data["actions"]))
+            robot_actions = _encode_actions_inv(robot_actions, adapt_to_pi=self.adapt_to_pi)
+            inputs["actions"] = _join_robot_key_state(robot_actions, key_actions)
+
+        if "prompt" in data:
+            inputs["prompt"] = data["prompt"]
+
+        return inputs
+
+
+@dataclasses.dataclass(frozen=True)
+class KeyStateAlohaOutputs(transforms.DataTransformFn):
+    """Aloha outputs that return robot actions plus key-state predictions."""
+
+    adapt_to_pi: bool = True
+
+    def __call__(self, data: dict) -> dict:
+        robot_actions, key_actions = _split_robot_key_state(np.asarray(data["actions"]))
+        robot_actions = _encode_actions(robot_actions, adapt_to_pi=self.adapt_to_pi)
+        return {"actions": _join_robot_key_state(robot_actions, key_actions)}
+
+
 def _joint_flip_mask() -> np.ndarray:
     """Used to convert between aloha and pi joint angles."""
     return np.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1])
@@ -185,6 +252,16 @@ def _decode_state(state: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray
         # Reverse the gripper transformation that is being applied by the Aloha runtime.
         state[[6, 13]] = _gripper_to_angular(state[[6, 13]])
     return state
+
+
+def _split_robot_key_state(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    return x[..., :14], x[..., 14:]
+
+
+def _join_robot_key_state(robot: np.ndarray, key_state: np.ndarray) -> np.ndarray:
+    if key_state.shape[-1] == 0:
+        return robot
+    return np.concatenate([robot, key_state], axis=-1)
 
 
 def _encode_actions(actions: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray:
