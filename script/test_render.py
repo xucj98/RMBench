@@ -12,6 +12,7 @@ import numpy as np
 import pdb
 import json
 import torch
+import os
 import sapien.core as sapien
 from sapien.utils.viewer import Viewer
 import gymnasium as gym
@@ -74,7 +75,15 @@ class Sapien_TEST(gym.Env):
 
         # declare sapien scene
         scene_config = sapien.SceneConfig()
-        self.scene = self.engine.create_scene(scene_config)
+        render_device = os.environ.get("SAPIEN_RENDER_DEVICE")
+        if render_device:
+            sapien.physx.set_scene_config(scene_config)
+            self.scene = sapien.Scene([
+                sapien.physx.PhysxCpuSystem(),
+                sapien.render.RenderSystem(render_device),
+            ])
+        else:
+            self.scene = self.engine.create_scene(scene_config)
 
 
 if __name__ == "__main__":
