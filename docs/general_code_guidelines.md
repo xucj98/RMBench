@@ -122,7 +122,11 @@ Changes:
 - 具体改动 2
 ```
 
-对于不显然的修复，建议额外提供 `Evidence`，写清楚能复现问题的命令、修复前现象和修复后现象。理想情况下，同一环境中 checkout 到修复前会复现 bug，checkout 到修复后 bug 消失。
+Bugfix、兼容性修复或 regression fix 类提交需要额外提供 `Evidence`，写清楚能复现问题的命令、修复前现象和修复后现象。理想情况下，同一环境中 checkout 到修复前会复现 bug，checkout 到修复后 bug 消失。
+
+非 fix 类提交不需要写 `Evidence`。普通功能、数据链路、实验入口、文档和 ignore 规则提交只保留 `Motivation` 和 `Changes`；验证命令可以放在最终汇报、review note 或 CI/test log 中。
+
+Commit message 的详细程度应和改动复杂度匹配。小型文档、README、ignore 或格式整理提交可以只写清楚 subject，必要时加一句简短 motivation；不需要为了模板完整而写长段说明。普通功能提交再使用简洁的 `Motivation` 和 `Changes`，复杂修复提交才需要更完整的上下文。
 
 示例：
 
