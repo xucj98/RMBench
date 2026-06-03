@@ -553,6 +553,14 @@ class Base_Task(gym.Env):
                 pkl_dic["joint_action"]["vector"] = np.array(left_jointstate + right_jointstate)
         return pkl_dic
 
+    def is_recording_eval_video(self):
+        return self.eval_video_path is not None and self.eval_video_ffmpeg is not None
+
+    def get_obs_for_policy(self):
+        if self.is_recording_eval_video():
+            return self.get_obs()
+        return self.get_obs_fast()
+
     def save_camera_rgb(self, save_path, camera_name='head_camera'):
         self._update_render()
         self.cameras.update_picture()

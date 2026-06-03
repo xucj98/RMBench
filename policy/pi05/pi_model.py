@@ -41,7 +41,7 @@ class PI0:
         assets_id = entries[0]
 
         config = _config.get_config(self.train_config_name)
-        self.key_state_enabled = "key_state_variant" in config.policy_metadata
+        self.key_state_enabled = "key_state_variant" in (config.policy_metadata or {})
         self.policy = _policy_config.create_trained_policy(
             config,
             f"policy/pi05/checkpoints/{self.train_config_name}/{self.model_name}/{self.checkpoint_id}",

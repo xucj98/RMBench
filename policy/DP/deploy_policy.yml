@@ -10,3 +10,5 @@ expert_data_num: null
 checkpoint_num: 600
 head_camera_type: D435
 ddim_steps: 10
+eval_video_log: true
+eval_video_count: 5

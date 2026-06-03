@@ -61,6 +61,32 @@ def get_embodiment_config(robot_file):
     return embodiment_args
 
 
+def coerce_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def get_eval_video_settings(args, usr_args):
+    eval_video_log = coerce_bool(usr_args.get("eval_video_log", True))
+    eval_video_count = int(usr_args.get("eval_video_count", 5))
+    if eval_video_count < 0:
+        eval_video_count = 0
+
+    args["eval_video_log"] = eval_video_log
+    args["eval_video_count"] = eval_video_count
+    return eval_video_log, eval_video_count
+
+
+def should_record_eval_video(args, rollout_idx):
+    return (
+        coerce_bool(args.get("eval_video_log", False))
+        and rollout_idx < int(args.get("eval_video_count", 0))
+    )
+
+
 def main(usr_args):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     task_name = usr_args["task_name"]
@@ -130,12 +156,15 @@ def main(usr_args):
         f.write(f"Eval log for {task_name} | {policy_name} | {task_config} | {ckpt_setting}\n")
         f.write(f"Timestamp: {current_time}\n\n")
 
-    if args["eval_video_log"]:
+    eval_video_log, eval_video_count = get_eval_video_settings(args, usr_args)
+    if eval_video_log and eval_video_count > 0:
         video_save_dir = save_dir
         camera_config = get_camera_config(args["camera"]["head_camera_type"])
         video_size = str(camera_config["w"]) + "x" + str(camera_config["h"])
         video_save_dir.mkdir(parents=True, exist_ok=True)
         args["eval_video_save_dir"] = video_save_dir
+    else:
+        args.pop("eval_video_save_dir", None)
 
     # output camera config
     print("============= Config =============\n")
@@ -279,7 +308,8 @@ def eval_policy(task_name,
         instruction = np.random.choice(results[0][instruction_type])
         TASK_ENV.set_instruction(instruction=instruction)  # set language instruction
 
-        if TASK_ENV.eval_video_path is not None:
+        record_video = should_record_eval_video(args, TASK_ENV.test_num)
+        if record_video and TASK_ENV.eval_video_path is not None:
             ffmpeg = subprocess.Popen(
                 [
                     "ffmpeg",
@@ -317,7 +347,7 @@ def eval_policy(task_name,
                 succ = True
                 break
         task_total_reward += TASK_ENV.max_reward
-        if TASK_ENV.eval_video_path is not None:
+        if record_video:
             TASK_ENV._del_eval_video_ffmpeg()
 
         if succ:

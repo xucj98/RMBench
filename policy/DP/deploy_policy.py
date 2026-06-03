@@ -45,7 +45,7 @@ def eval(TASK_ENV, model, observation):
 
     for action in actions:
         TASK_ENV.take_action(action)
-        observation = TASK_ENV.get_obs_fast()
+        observation = TASK_ENV.get_obs_for_policy()
         obs = encode_obs(observation)
         model.update_obs(obs)
 

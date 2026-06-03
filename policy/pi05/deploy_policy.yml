@@ -11,3 +11,5 @@ train_config_name: null
 model_name: null
 checkpoint_id: 30000
 pi0_step: 50
+eval_video_log: true
+eval_video_count: 5
