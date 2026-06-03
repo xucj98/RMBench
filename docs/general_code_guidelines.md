@@ -128,6 +128,39 @@ Bugfix、兼容性修复或 regression fix 类提交需要额外提供 `Evidence
 
 Commit message 的详细程度应和改动复杂度匹配。小型文档、README、ignore 或格式整理提交可以只写清楚 subject，必要时加一句简短 motivation；不需要为了模板完整而写长段说明。普通功能提交再使用简洁的 `Motivation` 和 `Changes`，复杂修复提交才需要更完整的上下文。
 
+多行 commit message 必须使用 `-F`，不要使用 `-m` 拼接多行正文，也不要在 shell 普通引号中写字面量 `\n`。`-m` 只用于单行 subject。
+
+```bash
+git commit -F /tmp/commit_message.txt
+```
+
+也可以从标准输入传入 message：
+
+```bash
+cat > /tmp/commit_message.txt <<'EOF'
+短标题
+
+Motivation:
+一两句话说明动机。
+
+Changes:
+- 具体改动 1
+- 具体改动 2
+EOF
+
+git commit -F /tmp/commit_message.txt
+```
+
+提交完成后应立即检查最近一次提交，确认 message 格式、提交文件和 diff 摘要符合预期：
+
+```bash
+git log -1 --pretty=full
+git show --stat --oneline --format=fuller HEAD
+git status --short
+```
+
+如果检查发现 commit message 格式错误，但该 commit 尚未用于正式实验、训练或对外共享，可以用 `git commit --amend` 修正。若已经用于正式实验或被他人依赖，应优先保留 commit id，并在后续说明中记录格式问题。
+
 示例：
 
 ```text

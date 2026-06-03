@@ -25,6 +25,16 @@ commit 拆分合理
 没有运行产物、机器私有路径或无关改动进入 git
 ```
 
+commit 完成后、正式实验启动前，还应检查最近一次 commit 的 message、diff 摘要和工作区状态：
+
+```bash
+git log -1 --pretty=full
+git show --stat --oneline --format=fuller HEAD
+git status --short
+```
+
+只有确认 commit 信息可读、提交内容正确、工作区干净后，才启动正式训练或评测。这样可以避免实验已经开始后才发现 commit message 或提交内容不符合溯源要求。
+
 ## 结果目录
 
 推荐只保留两类主要结果目录：
