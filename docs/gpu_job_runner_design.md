@@ -39,12 +39,12 @@ runner 的输入是 job manifest。每个 job 至少包含：
     "scripts/train.py",
     "pi0_aloha_put_back_block_key_state_default_lora",
     "--exp-name=pi0_put_back_block_key_state_default",
-    "--checkpoint-base-dir=storage/pi0_checkpoints"
+    "--checkpoint-base-dir=checkpoints"
   ],
   "env": {
     "PYTHONPATH": "src"
   },
-  "log_path": "storage/pi0_checkpoints/pi0_key_state/default/train.log",
+  "log_path": "policy/pi05/checkpoints/pi0_key_state/default/train.log",
   "requires_gpu": true,
   "gpu_requirements": {
     "num_gpus": 1,
@@ -64,7 +64,7 @@ DP job 使用同一结构，只是 `cwd` 和 `cmd` 不同：
   "cwd": "policy/DP",
   "cmd": ["python", "train.py", "--config", "configs/swap_blocks.yaml"],
   "env": {},
-  "log_path": "storage/checkpoints/dp/swap_blocks_seed0/train.log",
+  "log_path": "policy/DP/checkpoints/swap_blocks_seed0/train.log",
   "requires_gpu": true,
   "gpu_requirements": {
     "num_gpus": 1,
@@ -195,13 +195,13 @@ runner 重启时应能从 state 恢复：
 项目级实验入口仍放在：
 
 ```text
-experiments/<experiment_name>/
+experiments/<batch_id>/
 ```
 
 实验入口负责：
 
 ```text
-1. 定义实验目的和 variants。
+1. 定义 batch 目的和需要启动的 jobs / variants。
 2. 执行数据转换、norm stats 等准备步骤，或生成对应 CPU jobs。
 3. 生成统一 job manifest。
 4. 调用通用 runner，或提示用户用 runner 启动。

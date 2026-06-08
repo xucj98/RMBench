@@ -15,7 +15,7 @@
 
 正式实验必须从明确的 git commit 启动，启动前 `git status --short` 原则上应为空。这样 wandb、checkpoint 和 eval_result 中记录的代码版本才有实际含义。
 
-这个要求只约束正式训练、正式评测、报告用实验和消融实验。调试性试跑可以在 dirty tree 上执行，但不应当成可复现结果引用；如果后续需要保留，应重新在 clean commit 上复跑。
+这个要求只约束正式训练、正式评测、报告用实验和消融实验。调试性试跑可以在未提交改动上执行，但不应当成可复现结果引用；如果后续需要保留，应重新在干净 commit 上复跑。
 
 当自动化系统或 AI 被要求实现代码并启动正式实验时，应先按通用代码规范完成自审和 commit，再启动实验。commit 前应确认：
 
@@ -51,6 +51,80 @@ eval_result/
 
 如果启动器需要运行过程中的临时文件，优先放在对应的 `checkpoints/` 或 `eval_result/` 子目录中；如果只是临时排查文件，应放在 ignored 的临时目录中。
 
+## 实验入口
+
+除了训练和评测产物目录，项目可以维护一个 git 管理的轻量实验目录：
+
+```text
+experiments/
+```
+
+`experiments/` 不是第三个大结果目录，不存 checkpoint、dataset、视频或大规模日志。它只负责两件事：
+
+```text
+1. 放批量实验入口。
+2. 说明这批实验的目的、运行方式和产物位置。
+```
+
+推荐结构：
+
+```text
+experiments/<batch_id>/
+  README.md
+  run.py / commands/ / configs/ / jobs/   # 可选，按实验需要
+```
+
+`<batch_id>` 表示一批共同回答同一个假设或问题的实验，例如复现一张表、验证一种数据处理方式、比较一组消融。一个 batch 下可以有多个具体实验。
+
+一个具体实验通常对应某个 policy、task、seed、训练配置和评测配置。它的事实记录应优先保存在 checkpoint 目录、eval_result 目录和 wandb 中，而不是在 `experiments/` 下再维护一份重复台账。
+
+`README.md` 说明：
+
+```text
+实验要回答的问题
+对比项
+数据和评测设置
+训练和评测如何启动
+checkpoint 目录或命名规则
+eval_result 目录或命名规则
+wandb project / group / 查询方式
+如何复跑
+当前结论或状态
+```
+
+正式训练产物应能在 checkpoint 目录或 wandb 中追溯到：
+
+```text
+batch_id
+run name
+commit
+训练命令
+训练配置
+数据来源
+wandb run id
+```
+
+正式评测产物应能在 eval_result 目录或 wandb 中追溯到：
+
+```text
+batch_id
+run name
+commit
+评测命令
+评测配置
+checkpoint 引用
+wandb run id 或 train wandb run id
+success count / test_num / success rate
+```
+
+如果只是补跑同一批实验的剩余 run，可以继续放在同一个 batch。如果改变了训练方法、学习率、steps、数据处理策略、评测设置或其他会影响结论的关键条件，应新建 batch，不要把结果混在一起。
+
+历史实验如果缺少 commit、完整命令或配置快照，不应硬补。可以在 README 中说明这些结果只能按现有路径定位，不能完全复现。
+
+smoke test、启动检查、单 episode 调试、未完成评测和失败排查不应进入正式结果汇总。它们可以放在 notes 或 raw audit 中，但不能和正式结果混在一起。
+
+已有 checkpoint 和 eval_result 不必为了实验入口而搬迁。README 通过相对路径说明已有产物位置即可，避免移动大文件导致路径断裂或历史记录失真。
+
 ## 共享存储入口
 
 多机 GPU 云服务器通常区分本地盘和共享云盘：
@@ -60,13 +134,13 @@ eval_result/
 共享云盘：多台机器可见，适合放 dataset、checkpoint、eval result。
 ```
 
-项目应提供一个共享存储入口，例如：
+如果项目需要统一共享存储入口，可以提供一个软链接，例如：
 
 ```text
 storage -> shared storage root
 ```
 
-代码和实验配置只引用：
+采用该方案时，代码和实验配置只引用：
 
 ```text
 storage/checkpoints/...
@@ -121,39 +195,6 @@ eval 设置
 配置应随训练结果或评测结果保存一份副本，并同步到 wandb。
 
 消融实验应通过配置改变，而不是通过临时修改代码改变。
-
-## 实验入口
-
-推荐使用统一实验入口：
-
-```text
-experiments/<experiment_name>/
-  README.md
-  run.py
-  configs/
-```
-
-这只是推荐结构。如果项目已有成熟入口，可以沿用，但需要保证：
-
-```text
-入口可发现
-配置可追溯
-训练结果进入 checkpoints
-评测结果进入 eval_result
-wandb 上能查看 config 和 summary
-```
-
-实验 README 至少说明：
-
-```text
-实验目的
-数据来源
-默认配置和消融项
-运行命令
-checkpoint 位置
-eval_result 位置
-如何复跑
-```
 
 ## 日志
 
