@@ -193,18 +193,14 @@ class PI0:
 
     # Update the observation window buffer
     def update_observation_window(self, img_arr, state):
-        img_front, img_right, img_left, puppet_arm = (
-            img_arr[0],
-            img_arr[1],
-            img_arr[2],
-            self._state_for_policy(state),
-        )
+        img_front, img_right, img_left = img_arr[0], img_arr[1], img_arr[2]
+        policy_state = self._state_for_policy(state)
         img_front = np.transpose(img_front, (2, 0, 1))
         img_right = np.transpose(img_right, (2, 0, 1))
         img_left = np.transpose(img_left, (2, 0, 1))
 
         self.observation_window = {
-            "state": state,
+            "state": policy_state,
             "images": {
                 "cam_high": img_front,
                 "cam_left_wrist": img_left,
