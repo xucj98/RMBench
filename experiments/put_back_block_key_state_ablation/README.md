@@ -11,7 +11,8 @@ task: put_back_block
 policy: pi05 deploy pi0 checkpoint
 checkpoint_id: 30000
 已确认 checkpoint: 8 个 variant 在共享存储上存在
-历史 eval: 3 个 variant，各 50 rollouts，均为 0/50
+当前保留 eval: 3 个已能直接评测的 variant，各录制 5 个 overlay failure-case 视频，成功率均为 0.0
+最近排查: default variant 的 schema_latch 视频调试仍失败，见下方排查记录
 训练可复现性: 暂未确认
 ```
 
@@ -109,14 +110,56 @@ policy/pi05/.venv/bin/python script/eval_policy.py --config policy/pi05/deploy_p
   --policy_name pi05 \
   --test_num 100 \
   --eval_video_log true \
-  --eval_video_count 5
+  --eval_video_count 5 \
+  --eval_video_key_state_overlay true
 ```
 
 注意：`script/eval_policy.py` 默认 `test_num=100`。`task_config/demo_clean_eval.yml` 里的 `episode_num: 50` 不会控制 eval rollout 数。RMBench 论文中的模拟实验表格也是 100 rollouts；之前本地 key-state 和 pi0 baseline 记录里用过 50 rollouts，那是探索设置，不是论文标准设置。
 
 录制 eval 视频时，`envs/_base_task.py::get_obs_for_policy()` 会退回完整 `get_obs()`，不会走 `get_obs_fast()`。这对 failure-case 视频是必要的；不录视频的 episode 仍可能使用 `get_obs_fast()`。
 
-## 历史结果
+后续 key-state 相关视频评测默认开启 `eval_video_key_state_overlay`。overlay 中显示的 key-state 用来排查策略输出和任务阶段，不代表环境成功条件本身。
+
+## 当前保留结果
+
+下面 3 个 overlay eval 是当前保留的 layout/failure-case 记录。它们评测的是同一批 key-state checkpoint，因此保留在本实验批次下，不单独建目录。每个目录下有 `episode0.mp4` 到 `episode4.mp4`，视频左上角带 key-state overlay。三条结果成功率均为 0.0。
+
+| Variant | Rollouts | Video count | Success rate | Source |
+| --- | ---: | ---: | ---: | --- |
+| `default` | 5 | 5 | 0.0 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_ks_overlay_video5/2026-06-09 01:31:21/_result.txt` |
+| `mat_hash_p50` | 5 | 5 | 0.0 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_mat_hash_p50_mem_ks_overlay_video5/2026-06-09 01:31:22/_result.txt` |
+| `phase_jitter5` | 5 | 5 | 0.0 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_phase_jitter5_mem_ks_overlay_video5/2026-06-09 01:31:22/_result.txt` |
+
+## 2026-06-10 锁存视频排查
+
+为排查 overlay 中 key-state 中途跳变的问题，代码增加了可选的 `key_state_update_mode=schema_latch`。该模式不改变默认评测语义；只有显式指定时才会使用 schema 里的 update rule，让 phase 单步单调推进、mat 首次识别后锁存。
+
+下面这次运行是调试性视频排查，启动后在看到 failure case 后手动停止，不作为正式 eval 指标：
+
+```text
+ckpt_setting: pi0_put_back_block_key_state_default_mem_schema_latch_video5
+train_config_name: pi0_aloha_put_back_block_key_state_default_lora
+model_name: pi0_put_back_block_key_state_default
+checkpoint_id: 30000
+key_state_update_mode: schema_latch
+test_num: 5
+eval_video_log: true
+eval_video_count: 5
+eval_video_key_state_overlay: true
+result_dir: eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_schema_latch_video5/2026-06-10 21:54:17
+```
+
+已生成文件：
+
+```text
+episode0.mp4: 完整生成，eval_log 记录 Fail
+episode1.mp4: 手动停止时的中间产物，不作为完整 episode
+_result.txt: 未生成
+```
+
+观察判断：即使使用 `schema_latch` 稳定 overlay 中的 phase 和 mat，视频里策略看起来仍然没有根据 phase/mat state 切换到不同运动模式；它仍主要在执行 phase 0 的动作，即把物体放到正中间，而不是在后续阶段把物体放回对应 mat。后续应优先检查 key-state 信息在训练时是否真的进入模型输入，以及部署推理时是否按同样格式输入。
+
+## 历史旁证
 
 下面是 3 个已评测 variant 的历史 50-rollout 结果：
 
@@ -133,13 +176,7 @@ pi0_lora_baseline put_back_block: 4/50 = 8%
 source: eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block/2026-06-01 16:27:39/_result.txt
 ```
 
-2026-06-09 启动的 failure-video rerun 使用 100 rollouts，并录制前 5 个 episode：
-
-| Variant | ckpt_setting | GPU | Launch log |
-| --- | --- | ---: | --- |
-| `default` | `pi0_put_back_block_key_state_default_mem_100rollout_video5_rerun` | 2 | `eval_result/put_back_block/pi05/demo_clean_eval/_launch_logs/pi0_put_back_block_key_state_default_mem_100rollout_video5_rerun_gpu2_20260609_011500.log` |
-| `mat_hash_p50` | `pi0_put_back_block_key_state_mat_hash_p50_mem_100rollout_video5_rerun` | 3 | `eval_result/put_back_block/pi05/demo_clean_eval/_launch_logs/pi0_put_back_block_key_state_mat_hash_p50_mem_100rollout_video5_rerun_gpu3_20260609_011500.log` |
-| `phase_jitter5` | `pi0_put_back_block_key_state_phase_jitter5_mem_100rollout_video5_rerun` | 4 | `eval_result/put_back_block/pi05/demo_clean_eval/_launch_logs/pi0_put_back_block_key_state_phase_jitter5_mem_100rollout_video5_rerun_gpu4_20260609_011501.log` |
+2026-06-09 的非 overlay 100-rollout rerun 也存在：`default` 和 `mat_hash_p50` 为 0/100，`phase_jitter5` 为 1/100。这组结果没有 key-state overlay，不作为当前 failure-case 视频记录；后续分析优先使用上面的 overlay 目录。
 
 名字里有 `video5_rerun` 但没有 `100rollout` 的中断目录，以及名字里有 `50rollout_video5_rerun` 的中断目录，都不要作为结果使用。
 
