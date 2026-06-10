@@ -13,5 +13,5 @@ checkpoint_id: 30000
 pi0_step: 50
 eval_video_log: true
 eval_video_count: 5
-eval_video_key_state_overlay: false
+eval_video_key_state_overlay: true
 key_state_update_mode: raw
