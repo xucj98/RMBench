@@ -625,6 +625,20 @@ def _pi0_robotwin_lora_config(name: str, repo_id: str) -> TrainConfig:
     )
 
 
+_PUT_BACK_BLOCK_KEY_STATE_SCHEMA = [
+    {
+        "name": "phase",
+        "size": 3,
+        "labels": ["move_to_center", "press_button", "move_back"],
+    },
+    {
+        "name": "mat",
+        "size": 5,
+        "labels": ["unknown", "left", "right", "front", "back"],
+    },
+]
+
+
 def _pi0_robotwin_key_state_lora_config(name: str, repo_id: str, variant: dict[str, Any]) -> TrainConfig:
     model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
     return TrainConfig(
@@ -636,7 +650,7 @@ def _pi0_robotwin_key_state_lora_config(name: str, repo_id: str, variant: dict[s
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
         fsdp_devices=1,
-        policy_metadata={"key_state_variant": variant},
+        policy_metadata={"key_state_variant": variant, "key_state_schema": _PUT_BACK_BLOCK_KEY_STATE_SCHEMA},
     )
 
 

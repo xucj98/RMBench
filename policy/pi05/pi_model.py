@@ -27,6 +27,18 @@ import os
 
 KEY_STATE_PHASE_SLICE = slice(14, 17)
 KEY_STATE_MAT_SLICE = slice(17, 22)
+DEFAULT_KEY_STATE_SCHEMA = [
+    {
+        "name": "phase",
+        "size": 3,
+        "labels": ["move_to_center", "press_button", "move_back"],
+    },
+    {
+        "name": "mat",
+        "size": 5,
+        "labels": ["unknown", "left", "right", "front", "back"],
+    },
+]
 
 
 class PI0:
@@ -41,7 +53,9 @@ class PI0:
         assets_id = entries[0]
 
         config = _config.get_config(self.train_config_name)
-        self.key_state_enabled = "key_state_variant" in (config.policy_metadata or {})
+        self.policy_metadata = config.policy_metadata or {}
+        self.key_state_enabled = "key_state_variant" in self.policy_metadata
+        self.key_state_schema = self._get_key_state_schema(self.policy_metadata)
         self.policy = _policy_config.create_trained_policy(
             config,
             f"policy/pi05/checkpoints/{self.train_config_name}/{self.model_name}/{self.checkpoint_id}",
@@ -68,6 +82,22 @@ class PI0:
         self.key_state[3] = 1.0
 
     @staticmethod
+    def _get_key_state_schema(policy_metadata):
+        schema = policy_metadata.get("key_state_schema")
+        if not schema:
+            return DEFAULT_KEY_STATE_SCHEMA
+        normalized = []
+        for item in schema:
+            labels = item.get("labels", [])
+            size = int(item.get("size", len(labels)))
+            normalized.append({
+                "name": item.get("name", "key_state"),
+                "size": size,
+                "labels": labels,
+            })
+        return normalized
+
+    @staticmethod
     def _one_hot_from_logits(logits):
         value = np.zeros_like(logits, dtype=np.float32)
         value[int(np.argmax(logits))] = 1.0
@@ -79,6 +109,32 @@ class PI0:
         action = np.asarray(action, dtype=np.float32)
         self.key_state[:3] = self._one_hot_from_logits(action[KEY_STATE_PHASE_SLICE])
         self.key_state[3:8] = self._one_hot_from_logits(action[KEY_STATE_MAT_SLICE])
+
+    def get_eval_video_overlay(self):
+        if not self.key_state_enabled:
+            return None
+        items = [{"label": "variant", "value": self._display_variant_name()}]
+        offset = 0
+        for entry in self.key_state_schema:
+            size = int(entry["size"])
+            values = self.key_state[offset:offset + size]
+            if values.size == 0:
+                continue
+            index = int(np.argmax(values))
+            labels = entry.get("labels", [])
+            if index < len(labels):
+                value = f"{labels[index]} [{index}]"
+            else:
+                value = str(index)
+            items.append({"label": entry["name"], "value": value})
+            offset += size
+        return {"title": "key-state", "items": items}
+
+    def _display_variant_name(self):
+        prefix = "pi0_put_back_block_key_state_"
+        if self.model_name.startswith(prefix):
+            return self.model_name[len(prefix):]
+        return self.model_name
 
     def action_for_env(self, action):
         return np.asarray(action, dtype=np.float32)[:14]

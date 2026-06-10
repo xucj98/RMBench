@@ -28,6 +28,11 @@ def get_model(usr_args):
     return PI0(train_config_name, model_name, checkpoint_id, pi0_step)
 
 
+def sync_eval_video_overlay(TASK_ENV, model):
+    if hasattr(TASK_ENV, "set_eval_video_overlay") and hasattr(model, "get_eval_video_overlay"):
+        TASK_ENV.set_eval_video_overlay(model.get_eval_video_overlay())
+
+
 def eval(TASK_ENV, model, observation):
 
     if model.observation_window is None:
@@ -42,6 +47,7 @@ def eval(TASK_ENV, model, observation):
     actions = model.get_action()[:model.pi0_step]
 
     for action in actions:
+        sync_eval_video_overlay(TASK_ENV, model)
         TASK_ENV.take_action(model.action_for_env(action))
         model.update_key_state_from_action(action)
         observation = TASK_ENV.get_obs_for_policy()

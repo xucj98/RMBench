@@ -23,6 +23,7 @@ from pathlib import Path
 import trimesh
 import imageio
 import glob
+import cv2
 
 
 from ._GLOBAL_CONFIGS import *
@@ -99,6 +100,8 @@ class Base_Task(gym.Env):
         self.take_action_cnt = 0
         self.eval_video_path = kwags.get("eval_video_save_dir", None)
         self.eval_video_ffmpeg = None
+        self.eval_video_key_state_overlay = self._coerce_bool(kwags.get("eval_video_key_state_overlay", False))
+        self.eval_video_overlay = None
 
         self.save_freq = kwags.get("save_freq")
         self.world_pcd = None
@@ -560,6 +563,90 @@ class Base_Task(gym.Env):
         if self.is_recording_eval_video():
             return self.get_obs()
         return self.get_obs_fast()
+
+    @staticmethod
+    def _coerce_bool(value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in {"1", "true", "yes", "y", "on"}
+        return bool(value)
+
+    def set_eval_video_overlay(self, overlay):
+        self.eval_video_overlay = overlay
+
+    def _format_eval_video_overlay_lines(self):
+        overlay = self.eval_video_overlay
+        if overlay is None:
+            return []
+        if isinstance(overlay, str):
+            return [line for line in overlay.splitlines() if line]
+        if isinstance(overlay, dict):
+            lines = []
+            title = overlay.get("title")
+            if title:
+                lines.append(str(title))
+            items = overlay.get("items", [])
+            if isinstance(items, dict):
+                items = items.items()
+            for item in items:
+                if isinstance(item, dict):
+                    label = item.get("label")
+                    value = item.get("value")
+                    if label is not None and value is not None:
+                        lines.append(f"{label}: {value}")
+                    elif value is not None:
+                        lines.append(str(value))
+                    elif label is not None:
+                        lines.append(str(label))
+                elif isinstance(item, (tuple, list)) and len(item) == 2:
+                    lines.append(f"{item[0]}: {item[1]}")
+                else:
+                    lines.append(str(item))
+            if not items:
+                for key, value in overlay.items():
+                    if key not in {"title", "items"}:
+                        lines.append(f"{key}: {value}")
+            return lines
+        if isinstance(overlay, (list, tuple)):
+            return [str(item) for item in overlay]
+        return [str(overlay)]
+
+    def _draw_eval_video_overlay(self, frame):
+        if not self.eval_video_key_state_overlay:
+            return frame
+        lines = self._format_eval_video_overlay_lines()
+        if not lines:
+            return frame
+
+        image = np.ascontiguousarray(frame.copy())
+        height, width = image.shape[:2]
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = max(0.42, min(width, height) / 640.0)
+        thickness = 1
+        padding = 6
+        line_gap = 5
+        text_sizes = [cv2.getTextSize(line[:90], font, font_scale, thickness)[0] for line in lines]
+        panel_width = min(max(size[0] for size in text_sizes) + padding * 2, width)
+        line_height = max(size[1] for size in text_sizes) + line_gap
+        panel_height = min(line_height * len(lines) + padding * 2, height)
+
+        overlay = image.copy()
+        cv2.rectangle(overlay, (0, 0), (panel_width, panel_height), (0, 0, 0), -1)
+        image = cv2.addWeighted(overlay, 0.62, image, 0.38, 0)
+
+        y = padding + text_sizes[0][1]
+        for idx, line in enumerate(lines):
+            if y + line_gap > panel_height:
+                break
+            color = (255, 255, 255) if idx else (80, 220, 255)
+            cv2.putText(image, line[:90], (padding, y), font, font_scale, color, thickness, cv2.LINE_AA)
+            y += line_height
+        return image
+
+    def _eval_video_frame(self):
+        frame = self.now_obs["third_view_rgb"]
+        return self._draw_eval_video_overlay(frame)
 
     def save_camera_rgb(self, save_path, camera_name='head_camera'):
         self._update_render()
@@ -1571,7 +1658,7 @@ class Base_Task(gym.Env):
         eval_video_freq = 1  # fixed
         if (self.eval_video_path is not None and self.eval_video_ffmpeg is not None and self.take_action_cnt % eval_video_freq == 0):
             # self.eval_video_ffmpeg.stdin.write(self.now_obs["observation"]["head_camera"]["rgb"].tobytes())
-            self.eval_video_ffmpeg.stdin.write(self.now_obs["third_view_rgb"].tobytes())
+            self.eval_video_ffmpeg.stdin.write(self._eval_video_frame().tobytes())
 
         self.take_action_cnt += 1
         print(f"step: \033[92m{self.take_action_cnt} / {self.step_lim}\033[0m", end="\r")
@@ -1758,7 +1845,7 @@ class Base_Task(gym.Env):
                 self.eval_success = True
                 self.get_obs() # update obs
                 if (self.eval_video_path is not None and self.eval_video_ffmpeg is not None):
-                    self.eval_video_ffmpeg.stdin.write(self.now_obs["third_view_rgb"].tobytes())
+                    self.eval_video_ffmpeg.stdin.write(self._eval_video_frame().tobytes())
                 return
 
         self._update_render()

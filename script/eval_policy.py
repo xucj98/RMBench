@@ -72,11 +72,13 @@ def coerce_bool(value):
 def get_eval_video_settings(args, usr_args):
     eval_video_log = coerce_bool(usr_args.get("eval_video_log", True))
     eval_video_count = int(usr_args.get("eval_video_count", 5))
+    eval_video_key_state_overlay = coerce_bool(usr_args.get("eval_video_key_state_overlay", False))
     if eval_video_count < 0:
         eval_video_count = 0
 
     args["eval_video_log"] = eval_video_log
     args["eval_video_count"] = eval_video_count
+    args["eval_video_key_state_overlay"] = eval_video_key_state_overlay
     return eval_video_log, eval_video_count
 
 
