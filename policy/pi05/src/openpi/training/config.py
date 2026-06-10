@@ -630,11 +630,13 @@ _PUT_BACK_BLOCK_KEY_STATE_SCHEMA = [
         "name": "phase",
         "size": 3,
         "labels": ["move_to_center", "press_button", "move_back"],
+        "update_rule": {"type": "monotonic", "max_step": 1},
     },
     {
         "name": "mat",
         "size": 5,
         "labels": ["unknown", "left", "right", "front", "back"],
+        "update_rule": {"type": "latch_once_nonzero", "unknown_index": 0},
     },
 ]
 

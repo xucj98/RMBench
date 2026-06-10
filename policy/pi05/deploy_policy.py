@@ -25,7 +25,8 @@ def encode_obs(observation):
 def get_model(usr_args):
     train_config_name, model_name, checkpoint_id, pi0_step = (usr_args["train_config_name"], usr_args["model_name"],
                                                               usr_args["checkpoint_id"], usr_args["pi0_step"])
-    return PI0(train_config_name, model_name, checkpoint_id, pi0_step)
+    key_state_update_mode = usr_args.get("key_state_update_mode", "raw")
+    return PI0(train_config_name, model_name, checkpoint_id, pi0_step, key_state_update_mode)
 
 
 def sync_eval_video_overlay(TASK_ENV, model):

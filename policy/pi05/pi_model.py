@@ -25,28 +25,34 @@ from openpi.training import data_loader as _data_loader
 import os
 
 
-KEY_STATE_PHASE_SLICE = slice(14, 17)
-KEY_STATE_MAT_SLICE = slice(17, 22)
+KEY_STATE_ACTION_OFFSET = 14
+KEY_STATE_PHASE_SLICE = slice(KEY_STATE_ACTION_OFFSET, KEY_STATE_ACTION_OFFSET + 3)
+KEY_STATE_MAT_SLICE = slice(KEY_STATE_ACTION_OFFSET + 3, KEY_STATE_ACTION_OFFSET + 8)
 DEFAULT_KEY_STATE_SCHEMA = [
     {
         "name": "phase",
         "size": 3,
         "labels": ["move_to_center", "press_button", "move_back"],
+        "update_rule": {"type": "monotonic", "max_step": 1},
     },
     {
         "name": "mat",
         "size": 5,
         "labels": ["unknown", "left", "right", "front", "back"],
+        "update_rule": {"type": "latch_once_nonzero", "unknown_index": 0},
     },
 ]
 
 
 class PI0:
 
-    def __init__(self, train_config_name, model_name, checkpoint_id, pi0_step):
+    def __init__(self, train_config_name, model_name, checkpoint_id, pi0_step, key_state_update_mode="raw"):
         self.train_config_name = train_config_name
         self.model_name = model_name
         self.checkpoint_id = checkpoint_id
+        if key_state_update_mode not in {"raw", "schema_latch"}:
+            raise ValueError(f"Unsupported key_state_update_mode: {key_state_update_mode}")
+        self.key_state_update_mode = key_state_update_mode
 
         specified_path = f"policy/pi05/checkpoints/{self.train_config_name}/{self.model_name}/{self.checkpoint_id}/assets/"
         entries = os.listdir(specified_path)
@@ -94,6 +100,7 @@ class PI0:
                 "name": item.get("name", "key_state"),
                 "size": size,
                 "labels": labels,
+                "update_rule": item.get("update_rule", {"type": "raw"}),
             })
         return normalized
 
@@ -107,13 +114,49 @@ class PI0:
         if not self.key_state_enabled:
             return
         action = np.asarray(action, dtype=np.float32)
+        if self.key_state_update_mode == "schema_latch":
+            self._update_key_state_from_schema(action)
+            return
         self.key_state[:3] = self._one_hot_from_logits(action[KEY_STATE_PHASE_SLICE])
         self.key_state[3:8] = self._one_hot_from_logits(action[KEY_STATE_MAT_SLICE])
+
+    def _update_key_state_from_schema(self, action):
+        offset = 0
+        for entry in self.key_state_schema:
+            size = int(entry["size"])
+            action_slice = action[KEY_STATE_ACTION_OFFSET + offset:KEY_STATE_ACTION_OFFSET + offset + size]
+            state_slice = self.key_state[offset:offset + size]
+            if action_slice.size == 0 or state_slice.size == 0:
+                offset += size
+                continue
+
+            pred = int(np.argmax(action_slice))
+            current = int(np.argmax(state_slice))
+            rule = entry.get("update_rule", {"type": "raw"})
+            rule_type = rule.get("type", "raw")
+
+            if rule_type == "monotonic":
+                max_step = int(rule.get("max_step", 1))
+                next_value = min(max(current, pred), current + max_step)
+            elif rule_type == "latch_once_nonzero":
+                unknown_index = int(rule.get("unknown_index", 0))
+                next_value = pred if current == unknown_index and pred != unknown_index else current
+            elif rule_type == "raw":
+                next_value = pred
+            else:
+                raise ValueError(f"Unsupported key-state update rule: {rule_type}")
+
+            self.key_state[offset:offset + size] = 0.0
+            self.key_state[offset + next_value] = 1.0
+            offset += size
 
     def get_eval_video_overlay(self):
         if not self.key_state_enabled:
             return None
-        items = [{"label": "variant", "value": self._display_variant_name()}]
+        items = [
+            {"label": "variant", "value": self._display_variant_name()},
+            {"label": "update", "value": self.key_state_update_mode},
+        ]
         offset = 0
         for entry in self.key_state_schema:
             size = int(entry["size"])
