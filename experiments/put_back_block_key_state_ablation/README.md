@@ -11,8 +11,8 @@ task: put_back_block
 policy: pi05 deploy pi0 checkpoint
 checkpoint_id: 30000
 已确认 checkpoint: 8 个 variant 在共享存储上存在
-当前保留 eval: 3 个已能直接评测的 variant，各录制 5 个 overlay failure-case 视频，成功率均为 0.0
-最近排查: default variant 的 schema_latch 视频调试仍失败，见下方排查记录
+当前保留 eval: default variant 在修复 key-state 推理输入后完成 100-rollout raw/schema_latch 对照，二者均为 55/100
+最近排查: schema_latch 不提升当前 default 模型成功率；失败主要卡在按钮 press gate，见下方排查记录
 训练可复现性: 暂未确认
 ```
 
@@ -157,7 +157,29 @@ episode1.mp4: 手动停止时的中间产物，不作为完整 episode
 _result.txt: 未生成
 ```
 
-观察判断：即使使用 `schema_latch` 稳定 overlay 中的 phase 和 mat，视频里策略看起来仍然没有根据 phase/mat state 切换到不同运动模式；它仍主要在执行 phase 0 的动作，即把物体放到正中间，而不是在后续阶段把物体放回对应 mat。后续应优先检查 key-state 信息在训练时是否真的进入模型输入，以及部署推理时是否按同样格式输入。
+初步观察：即使使用 `schema_latch` 稳定 overlay 中的 phase 和 mat，视频里策略看起来仍然没有根据 phase/mat state 切换到不同运动模式；它仍主要在执行 phase 0 的动作，即把物体放到正中间，而不是在后续阶段把物体放回对应 mat。后续检查发现，部署推理时已经生成了 32 维 key-state policy state，但实际传给 policy 的仍是原始 14 维 state。该问题已在 `a6737e5` 修复。
+
+## 2026-06-10 State Input 修复后对照
+
+在 `a6737e5` 修复 pi05 部署时 key-state 推理输入丢失的问题后，对 `default` variant 重新做了 100-rollout eval。两次评测均开启前 5 个 episode 的 overlay 视频录制。
+
+| Run | key_state_update_mode | Rollouts | Success | Success rate | Result |
+| --- | --- | ---: | ---: | ---: | --- |
+| `statefix_raw_100rollout_video5` | `raw` | 100 | 55 | 0.55 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_raw_100rollout_video5/2026-06-10 22:41:07/_result.txt` |
+| `statefix_schema_latch_100rollout_video5` | `schema_latch` | 100 | 55 | 0.55 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_schema_latch_100rollout_video5/2026-06-10 22:41:07/_result.txt` |
+
+两组 eval 的 episode 结果逐条一致：`seed=100000` 到 `seed=100099` 中均为 55 个 Success、45 个 Fail。因此，当前 default 模型的成功率不依赖 `schema_latch`；正常 eval 可以继续使用默认 `raw`，`schema_latch` 主要保留为 overlay/阶段状态排查工具。
+
+为解释失败原因，额外做过一次临时 debug 统计：`schema_latch`、20 rollouts、无视频，结果为 11/20。9 个失败 episode 全部满足：
+
+```text
+press_cnt = 0
+stage_id 从未离开 0
+block 曾到达 center
+block 曾满足最终目标区域几何条件
+```
+
+这说明这批失败不是最终放置位置本身没到，而是环境没有记录到按钮 press，导致 `stage_id` 没有打开最终成功 gate。相关 debug 代码只用于本地排查，不作为正式实验代码提交。
 
 ## 历史旁证
 
