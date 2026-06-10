@@ -2,13 +2,13 @@
 
 Batch ID: `pi0_lora_baseline`
 
-本批实验记录 pi0 LoRA 在 RMBench 三个任务上的 baseline 结果，并用同一批 checkpoint 验证 `get_obs_fast` 评测加速改动是否保持结果一致。
+本批实验记录 pi0 LoRA 在 RMBench 上的 baseline 进度，并用已完成的三任务 checkpoint 验证 `get_obs_fast` 评测加速改动是否保持结果一致。
 
 这里不单独创建 fast obs batch：fast obs 不是新的训练 recipe，也不是新的 baseline 模型，而是同一批 pi0 LoRA checkpoint 上的 eval implementation validation。主 baseline 结果只采用 original obs；fast obs 结果单独列为验证表，不混入 baseline 对比。后续如果要系统测试 fast obs 对更多 policy、task 或 seed 的影响，应另建单独 batch。
 
 ## 实验范围
 
-正式 baseline 范围：
+当前已有正式 baseline 结果：
 
 ```text
 policy: pi05 deploy pi0 checkpoint
@@ -18,6 +18,17 @@ task_config: demo_clean_eval
 instruction_type: unseen
 checkpoint_id: 30000
 test_num: 50
+```
+
+2026-06-11 开始补齐剩余 6 个任务的 pi0 LoRA 训练。训练完成并评测前，这 6 个任务不进入 baseline 结果表：
+
+```text
+observe_and_pickup
+rearrange_blocks
+cover_blocks
+battery_try
+press_button
+blocks_ranking_try
 ```
 
 不纳入正式 baseline：
@@ -30,7 +41,7 @@ key-state 消融
 pi05 full finetune swap_blocks
 ```
 
-## 检查点
+## 已完成检查点
 
 | Task | Train config | Checkpoint | wandb id |
 | --- | --- | --- | --- |
@@ -39,6 +50,43 @@ pi05 full finetune swap_blocks
 | `put_back_block` | `pi0_aloha_put_back_block_lora` | `policy/pi05/checkpoints/pi0_aloha_put_back_block_lora/pi0_put_back_block/30000` | `gdambjg2` |
 
 这些 checkpoint 目录下也保留了 step `20000`，但本批 eval 使用 `checkpoint_id: 30000`。
+
+## 剩余 6 任务训练
+
+批量入口：
+
+```bash
+python experiments/pi0_lora_baseline/run_missing_tasks.py
+```
+
+该脚本按顺序执行：
+
+```text
+process_data -> convert_lerobot -> compute_norm_stats -> launch_train
+```
+
+训练 checkpoint 仍使用 openpi 默认规则：
+
+```text
+policy/pi05/checkpoints/<train_config_name>/<model_name>/
+```
+
+本轮预计落点：
+
+| Task | Train config | Model name | GPU |
+| --- | --- | --- | ---: |
+| `observe_and_pickup` | `pi0_aloha_observe_and_pickup_lora` | `pi0_observe_and_pickup` | 1 |
+| `rearrange_blocks` | `pi0_aloha_rearrange_blocks_lora` | `pi0_rearrange_blocks` | 2 |
+| `cover_blocks` | `pi0_aloha_cover_blocks_lora` | `pi0_cover_blocks` | 3 |
+| `battery_try` | `pi0_aloha_battery_try_lora` | `pi0_battery_try` | 4 |
+| `press_button` | `pi0_aloha_press_button_lora` | `pi0_press_button` | 5 |
+| `blocks_ranking_try` | `pi0_aloha_blocks_ranking_try_lora` | `pi0_blocks_ranking_try` | 6 |
+
+日志和启动 manifest 写入：
+
+```text
+policy/pi05/checkpoints/_launch_logs/pi0_lora_baseline/<timestamp>/
+```
 
 ## 运行方式
 
@@ -55,8 +103,8 @@ PYTHONPATH=src .venv/bin/python scripts/train.py \
 其中：
 
 ```text
-<train_config_name>: pi0_aloha_swap_blocks_lora | pi0_aloha_swap_T_lora | pi0_aloha_put_back_block_lora
-<model_name>: pi0_swap_blocks | pi0_swap_T | pi0_put_back_block
+<train_config_name>: pi0_aloha_<task>_lora
+<model_name>: pi0_<task>
 ```
 
 评测单个任务：
