@@ -18,6 +18,7 @@ from datetime import datetime
 import importlib
 import argparse
 import pdb
+import shlex
 
 from generate_episode_instructions import *
 
@@ -44,6 +45,69 @@ from typing import Any
 
 current_file_path = os.path.abspath(__file__)
 parent_directory = os.path.dirname(current_file_path)
+
+
+def get_git_commit():
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[1],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def get_runtime_env():
+    keys = ["CUDA_VISIBLE_DEVICES", "SAPIEN_RENDER_DEVICE", "PYTHONPATH"]
+    return {key: os.environ.get(key) for key in keys if os.environ.get(key) is not None}
+
+
+def to_yaml_safe(value):
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): to_yaml_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [to_yaml_safe(item) for item in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def resolve_eval_save_dir(usr_args, task_name, policy_name, task_config, ckpt_setting, current_time):
+    eval_output_dir = usr_args.get("eval_output_dir")
+    if eval_output_dir:
+        return Path(str(eval_output_dir))
+    return Path(f"eval_result/{task_name}/{policy_name}/{task_config}/{ckpt_setting}/{current_time}")
+
+
+def write_eval_run_files(save_dir, current_time, usr_args, task_args):
+    runtime = dict(usr_args.get("_runtime", {}))
+    runtime.update({
+        "timestamp": current_time,
+        "save_dir": str(save_dir),
+    })
+    usr_args_snapshot = {key: value for key, value in usr_args.items() if key != "_runtime"}
+    snapshot = {
+        "runtime": runtime,
+        "usr_args": usr_args_snapshot,
+        "task_args": task_args,
+    }
+    with (save_dir / "config.yaml").open("w", encoding="utf-8") as f:
+        yaml.safe_dump(to_yaml_safe(snapshot), f, allow_unicode=True, sort_keys=False)
+
+    with (save_dir / "command.txt").open("w", encoding="utf-8") as f:
+        f.write(f"commit: {runtime.get('git_commit', 'unknown')}\n")
+        f.write(f"cwd: {runtime.get('cwd', '')}\n")
+        env = runtime.get("env", {})
+        if env:
+            f.write("env:\n")
+            for key, value in env.items():
+                f.write(f"  {key}={value}\n")
+        f.write("command:\n")
+        f.write(f"  {runtime.get('command', '')}\n")
 
 import numpy as np
 import json
@@ -316,8 +380,18 @@ def main(usr_args):
     else:
         embodiment_name = str(embodiment_type[0]) + "+" + str(embodiment_type[1])
 
-    save_dir = Path(f"eval_result/{task_name}/{policy_name}/{task_config}/{ckpt_setting}/{current_time}")
+    args["policy_name"] = policy_name
+    usr_args["left_arm_dim"] = len(args["left_embodiment_config"]["arm_joints_name"][0])
+    usr_args["right_arm_dim"] = len(args["right_embodiment_config"]["arm_joints_name"][1])
+
+    save_dir = resolve_eval_save_dir(usr_args, task_name, policy_name, task_config, ckpt_setting, current_time)
     save_dir.mkdir(parents=True, exist_ok=True)
+
+    log_file = save_dir / "eval_log.txt"
+    args["log_file"] = str(log_file)
+    with open(log_file, "w", encoding="utf-8") as f:
+        f.write(f"Eval log for {task_name} | {policy_name} | {task_config} | {ckpt_setting}\n")
+        f.write(f"Timestamp: {current_time}\n\n")
 
     eval_video_log, eval_video_count = get_eval_video_settings(args, usr_args)
     if eval_video_log and eval_video_count > 0:
@@ -328,6 +402,8 @@ def main(usr_args):
         args["eval_video_save_dir"] = video_save_dir
     else:
         args.pop("eval_video_save_dir", None)
+
+    write_eval_run_files(save_dir, current_time, usr_args, args)
 
     # output camera config
     print("============= Config =============\n")
@@ -349,9 +425,6 @@ def main(usr_args):
     print("\n==================================")
 
     TASK_ENV = class_decorator(args["task_name"])
-    args["policy_name"] = policy_name
-    usr_args["left_arm_dim"] = len(args["left_embodiment_config"]["arm_joints_name"][0])
-    usr_args["right_arm_dim"] = len(args["right_embodiment_config"]["arm_joints_name"][1])
 
     seed = usr_args["seed"]
 
@@ -504,8 +577,22 @@ def eval_policy(task_name,
         if succ:
             TASK_ENV.suc += 1
             print("\033[92mSuccess!\033[0m")
+            result_str = "Success"
         else:
             print("\033[91mFail!\033[0m")
+            result_str = "Fail"
+
+        log_file = args.get("log_file", None)
+        if log_file is not None:
+            try:
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(
+                        f"episode_id={now_id}, "
+                        f"seed={now_seed}, "
+                        f"result={result_str}\n"
+                    )
+            except Exception as e:
+                print(f"[Log Warning] Failed to write log: {e}")
 
         now_id += 1
         TASK_ENV.close_env(clear_cache=((succ_seed + 1) % clear_cache_freq == 0))
@@ -550,9 +637,19 @@ def parse_args_and_config():
             override_dict[key] = value
         return override_dict
 
+    overrides = {}
     if args.overrides:
         overrides = parse_override_pairs(args.overrides)
         config.update(overrides)
+
+    config["_runtime"] = {
+        "config_path": args.config,
+        "overrides": overrides,
+        "command": " ".join(shlex.quote(item) for item in sys.argv),
+        "cwd": os.getcwd(),
+        "git_commit": get_git_commit(),
+        "env": get_runtime_env(),
+    }
 
     return config
 

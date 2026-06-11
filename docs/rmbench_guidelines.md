@@ -146,12 +146,13 @@ eval_result/<batch_id>/<run_id>/
   _result.txt
   eval_log.txt
   stdout.log
+  command.txt
   config.yaml
   episode0.mp4
   ...
 ```
 
-`_result.txt` 保存最终指标；`eval_log.txt` 保存 episode 级结果；`stdout.log` 保存该次 eval 进程的 stdout/stderr；`config.yaml` 保存 deploy config、CLI overrides、task config 和脚本解析后的最终有效配置快照。单次 eval 的 stdout/stderr 是 per-run 日志，应和该 run 的结果放在同一目录，不要另放到 `_launch_logs/`。
+`_result.txt` 保存最终指标；`eval_log.txt` 保存 episode 级结果；`stdout.log` 保存该次 eval 进程的 stdout/stderr；`command.txt` 保存启动命令、当前 commit 和关键环境变量；`config.yaml` 保存 deploy config、CLI overrides、task config 和脚本解析后的最终有效配置快照。单次 eval 的 stdout/stderr 是 per-run 日志，应和该 run 的结果放在同一目录，不要另放到 `_launch_logs/`。
 
 只有跨多个 run 的队列调度日志才属于 batch 级日志，例如启动了哪些 run、分配到哪些 GPU、进程何时结束。此类日志可以放在 batch 目录下：
 
