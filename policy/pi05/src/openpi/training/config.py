@@ -735,7 +735,7 @@ _CONFIGS = [
         },
     ),
     _pi0_robotwin_key_state_full_config(
-        "pi0_aloha_put_back_block_key_state_default_full_b8",
+        "pi0_aloha_put_back_block_key_state_default_full_b32",
         "put_back_block_demo_clean_key_state_default",
         {
             "phase_input_policy": "gt",
@@ -745,7 +745,7 @@ _CONFIGS = [
             "phase_boundary_jitter_frames": 0,
             "phase_lag_recovery": False,
         },
-        batch_size=8,
+        batch_size=32,
     ),
     _pi0_robotwin_key_state_lora_config(
         "pi0_aloha_put_back_block_key_state_mat_first_lora",

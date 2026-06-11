@@ -183,20 +183,20 @@ block 曾满足最终目标区域几何条件
 
 ## 2026-06-11 Full Finetune 对照
 
-为比较同一份 default key-state 数据下 LoRA 和全量微调的差异，启动一个 pi0 full finetune 对照。由于当前只有 GPU7 空闲，而 openpi 示例中的 pi0 full finetune 使用 `fsdp_devices=4`，本次采用单卡可尝试的 `batch_size=8`，配置名中显式标记为 `full_b8`。
+为比较同一份 default key-state 数据下 LoRA 和全量微调的差异，启动一个 pi0 full finetune 对照。当前 GPU7 空闲，本次使用单卡 `batch_size=32`，并通过 `XLA_PYTHON_CLIENT_MEM_FRACTION=0.95` 提高 XLA 可预分配显存上限。
 
 ```text
-train_config_name: pi0_aloha_put_back_block_key_state_default_full_b8
-model_name: pi0_put_back_block_key_state_default_full_b8
+train_config_name: pi0_aloha_put_back_block_key_state_default_full_b32
+model_name: pi0_put_back_block_key_state_default_full_b32
 dataset repo id: put_back_block_demo_clean_key_state_default
 fine_tune: full
-batch_size: 8
+batch_size: 32
 num_train_steps: 30000
 gpu: 7
-checkpoint_dir: policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_full_b8/pi0_put_back_block_key_state_default_full_b8
+checkpoint_dir: policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_full_b32/pi0_put_back_block_key_state_default_full_b32
 ```
 
-该 run 是 full finetune follow-up，不计入上面 8 个 LoRA 消融 variant。若单卡 full finetune 出现 OOM，应改为等待多卡空闲后按 FSDP 复跑。
+该 run 是 full finetune follow-up，不计入上面 8 个 LoRA 消融 variant。若单卡 full finetune 仍出现 OOM，再改为等待多卡空闲后按 FSDP 复跑。
 
 ## 历史旁证
 
