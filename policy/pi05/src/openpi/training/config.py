@@ -656,6 +656,31 @@ def _pi0_robotwin_key_state_lora_config(name: str, repo_id: str, variant: dict[s
     )
 
 
+def _pi0_robotwin_key_state_full_config(
+    name: str,
+    repo_id: str,
+    variant: dict[str, Any],
+    *,
+    batch_size: int,
+) -> TrainConfig:
+    model = pi0_config.Pi0Config()
+    return TrainConfig(
+        name=name,
+        model=model,
+        data=_robotwin_aloha_key_state_data(repo_id),
+        freeze_filter=model.get_freeze_filter(),
+        batch_size=batch_size,
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+        fsdp_devices=1,
+        policy_metadata={
+            "fine_tune": "full",
+            "key_state_variant": variant,
+            "key_state_schema": _PUT_BACK_BLOCK_KEY_STATE_SCHEMA,
+        },
+    )
+
+
 # Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
     ###
@@ -708,6 +733,19 @@ _CONFIGS = [
             "phase_boundary_jitter_frames": 0,
             "phase_lag_recovery": False,
         },
+    ),
+    _pi0_robotwin_key_state_full_config(
+        "pi0_aloha_put_back_block_key_state_default_full_b8",
+        "put_back_block_demo_clean_key_state_default",
+        {
+            "phase_input_policy": "gt",
+            "mat_input_policy": "unknown_until_wmat_end",
+            "wmat_margin_frames": 0,
+            "key_output_mode": "per_step",
+            "phase_boundary_jitter_frames": 0,
+            "phase_lag_recovery": False,
+        },
+        batch_size=8,
     ),
     _pi0_robotwin_key_state_lora_config(
         "pi0_aloha_put_back_block_key_state_mat_first_lora",
