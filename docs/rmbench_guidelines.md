@@ -79,6 +79,88 @@ eval_result/
 
 不要额外创建长期 `runs/` 结果目录。临时 pid、queue state 或启动日志如果需要保存，应放在对应训练或评测结果目录中，或者放在 ignored 的临时目录中。
 
+### pi05 checkpoint 命名
+
+pi05/openpi 训练默认按两层语义保存 checkpoint：
+
+```text
+policy/pi05/checkpoints/<train_config_name>/<exp_name>/<step>
+```
+
+这两层目录都应被有效利用：
+
+```text
+<train_config_name>
+  表示一组共享模型结构、数据处理、归一化资产和训练范式的稳定配置。
+
+<exp_name>
+  表示该配置下的一个具体 run，例如 task、variant、seed 或补跑编号。
+```
+
+同一批实验如果只是 task、seed、batch size、GPU、学习率小范围覆盖或运行名不同，应优先复用同一个 `train_config_name`，通过 CLI override 或批量启动脚本传入 `repo_id`、`exp_name`、`batch_size` 等运行参数。这里的 `repo_id` 指 LeRobot 数据集名或数据集引用，不是代码仓库。不要为每个 task 都新增一个 config，导致目录退化为：
+
+```text
+checkpoints/<task_config>/<task_exp>/...
+```
+
+这种写法会让第一层和第二层重复表达同一个 run，浪费 openpi 已经提供的两层结构。
+
+只有模型结构、policy 行为、数据 transform、state/action schema、归一化规则或默认数据语义发生变化时，才应新增 `train_config_name`。例如 LoRA 与 full finetune 可以是不同 config；同一 full finetune 只是 batch size 从 8 改到 32，不应新建 config。
+
+pi05 的 assets 目录按 `train_config_name` 和 `repo_id` 组织：
+
+```text
+policy/pi05/assets/<train_config_name>/<repo_id>/norm_stats.json
+```
+
+`norm_stats` 反映的是某个数据集在有效数据处理链路下进入模型前后的统计量，不反映 `exp_name`、GPU 或 batch size。单纯修改 batch size、GPU、运行名或补跑编号，应复用已有 assets。
+
+原则上，以下变化需要重新计算 `norm_stats`：
+
+```text
+repo_id 变化，即换了 LeRobot 数据集。
+会改变模型输入或监督分布的 state/action transform 变化。
+归一化规则变化。
+```
+
+如果数据处理层面的变化很轻，例如只改变少量离散 one-hot key-state 的时序策略，且明确判断复用原统计量不会影响结论，可以复用同一份 assets；这种复用应在实验 README 或启动脚本中说明。
+
+### eval_result 命名
+
+新实验的 eval result 应按实验批次优先组织：
+
+```text
+eval_result/<batch_id>/<run_id>/
+```
+
+不要默认使用旧脚本的环境视角层级作为新实验主结构：
+
+```text
+eval_result/<task_name>/<policy_name>/<task_config>/<ckpt_setting>/<timestamp>/
+```
+
+每个 eval run 目录应聚合同一次评测的结果、日志、配置和视频：
+
+```text
+eval_result/<batch_id>/<run_id>/
+  _result.txt
+  eval_log.txt
+  stdout.log
+  config.yaml
+  episode0.mp4
+  ...
+```
+
+`_result.txt` 保存最终指标；`eval_log.txt` 保存 episode 级结果；`stdout.log` 保存该次 eval 进程的 stdout/stderr；`config.yaml` 保存 deploy config、CLI overrides、task config 和脚本解析后的最终有效配置快照。单次 eval 的 stdout/stderr 是 per-run 日志，应和该 run 的结果放在同一目录，不要另放到 `_launch_logs/`。
+
+只有跨多个 run 的队列调度日志才属于 batch 级日志，例如启动了哪些 run、分配到哪些 GPU、进程何时结束。此类日志可以放在 batch 目录下：
+
+```text
+eval_result/<batch_id>/_queue.log
+```
+
+也可以放在 ignored 的临时运行目录中。它不应替代 per-run 的 `stdout.log`。
+
 ## 实验入口
 
 RMBench 的项目级一键实验入口统一放在：
