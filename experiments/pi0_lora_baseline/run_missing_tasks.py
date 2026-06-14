@@ -17,48 +17,43 @@ WORKSPACE_ROOT = EXPERIMENT_DIR.parents[1]
 PI05_ROOT = WORKSPACE_ROOT / "policy/pi05"
 PYTHON = PI05_ROOT / ".venv/bin/python"
 BATCH_ID = "pi0_lora_baseline"
+TRAIN_CONFIG_NAME = "pi0_lora_baseline"
 
 TASKS: list[dict[str, Any]] = [
     {
         "task": "observe_and_pickup",
-        "config": "pi0_aloha_observe_and_pickup_lora",
         "repo": "observe_and_pickup_demo_clean",
-        "exp": "pi0_observe_and_pickup",
+        "exp": "observe_and_pickup",
         "gpu": 1,
     },
     {
         "task": "rearrange_blocks",
-        "config": "pi0_aloha_rearrange_blocks_lora",
         "repo": "rearrange_blocks_demo_clean",
-        "exp": "pi0_rearrange_blocks",
+        "exp": "rearrange_blocks",
         "gpu": 2,
     },
     {
         "task": "cover_blocks",
-        "config": "pi0_aloha_cover_blocks_lora",
         "repo": "cover_blocks_demo_clean",
-        "exp": "pi0_cover_blocks",
+        "exp": "cover_blocks",
         "gpu": 3,
     },
     {
         "task": "battery_try",
-        "config": "pi0_aloha_battery_try_lora",
         "repo": "battery_try_demo_clean",
-        "exp": "pi0_battery_try",
+        "exp": "battery_try",
         "gpu": 4,
     },
     {
         "task": "press_button",
-        "config": "pi0_aloha_press_button_lora",
         "repo": "press_button_demo_clean",
-        "exp": "pi0_press_button",
+        "exp": "press_button",
         "gpu": 5,
     },
     {
         "task": "blocks_ranking_try",
-        "config": "pi0_aloha_blocks_ranking_try_lora",
         "repo": "blocks_ranking_try_demo_clean",
-        "exp": "pi0_blocks_ranking_try",
+        "exp": "blocks_ranking_try",
         "gpu": 6,
     },
 ]
@@ -112,11 +107,11 @@ def _lerobot_dir(task: dict[str, Any]) -> Path:
 
 
 def _norm_stats_path(task: dict[str, Any]) -> Path:
-    return PI05_ROOT / "assets" / task["config"] / task["repo"] / "norm_stats.json"
+    return PI05_ROOT / "assets" / TRAIN_CONFIG_NAME / task["repo"] / "norm_stats.json"
 
 
 def _checkpoint_dir(task: dict[str, Any]) -> Path:
-    return PI05_ROOT / "checkpoints" / task["config"] / task["exp"]
+    return PI05_ROOT / "checkpoints" / TRAIN_CONFIG_NAME / task["exp"]
 
 
 def _check_raw_data(task: dict[str, Any]) -> None:
@@ -180,7 +175,14 @@ def prepare_data(args: argparse.Namespace, run_dir: Path) -> None:
 
         if args.force_norm or not _norm_ready(task):
             _run_logged(
-                [str(PYTHON), "scripts/compute_norm_stats.py", "--config-name", task["config"]],
+                [
+                    str(PYTHON),
+                    "scripts/compute_norm_stats.py",
+                    "--config-name",
+                    TRAIN_CONFIG_NAME,
+                    "--repo-id",
+                    task["repo"],
+                ],
                 log_dir / f"norm_{task['task']}.log",
                 disable_gpu=True,
                 dry_run=args.dry_run,
@@ -194,15 +196,16 @@ def launch_training(args: argparse.Namespace, run_dir: Path) -> list[dict[str, A
     launched = []
     for task in TASKS:
         ckpt_dir = _checkpoint_dir(task)
-        if ckpt_dir.exists() and not args.overwrite_checkpoints:
+        if ckpt_dir.exists() and not args.overwrite_checkpoints and not args.dry_run:
             raise FileExistsError(f"{ckpt_dir} exists; pass --overwrite-checkpoints to replace it")
 
         cmd = [
             str(PYTHON),
             "scripts/train.py",
-            task["config"],
+            TRAIN_CONFIG_NAME,
             f"--exp-name={task['exp']}",
             "--checkpoint-base-dir=checkpoints",
+            f"--data.repo-id={task['repo']}",
         ]
         if args.overwrite_checkpoints:
             cmd.append("--overwrite")

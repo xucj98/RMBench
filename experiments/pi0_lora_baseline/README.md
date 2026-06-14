@@ -55,14 +55,14 @@ checkpoint step 目录内部也保留训练时写入的 assets 副本：
 policy/pi05/checkpoints/pi0_lora_baseline/<task_name>/30000/assets/<repo_id>/norm_stats.json
 ```
 
-为了让 eval 直接按整理后的 checkpoint 路径加载，本批新增聚合配置：
+为了让训练和 eval 都按整理后的 checkpoint 路径工作，本批使用聚合配置：
 
 ```text
 train_config_name: pi0_lora_baseline
 model_name: <task_name>
 ```
 
-该配置只用于统一加载和后续复跑入口；模型结构、LoRA 设置和 robotwin aloha transform 与原 9 个 `pi0_aloha_<task>_lora` 配置保持一致。eval 时 norm stats 从 checkpoint step 内部的 assets 加载。
+该配置通过 CLI 覆盖 `--data.repo-id=<repo_id>` 和 `--exp-name=<task_name>` 复用到不同任务。模型结构、LoRA 设置和 robotwin aloha transform 与历史 per-task 训练配置保持一致。eval 时 norm stats 从 checkpoint step 内部的 assets 加载。
 
 | Task | Repo ID | Checkpoint | wandb id |
 | --- | --- | --- | --- |
@@ -157,4 +157,4 @@ project: RMBench
 group: pi0_lora_baseline
 ```
 
-历史 3 个 run 的 group 不一定完整规范；剩余 6 个训练通过 `run_missing_tasks.py` 设置了 `WANDB_RUN_GROUP=pi0_lora_baseline`。
+历史 3 个 run 的 group 不一定完整规范；后续补训入口 `run_missing_tasks.py` 使用 `pi0_lora_baseline` 作为统一 train config，并设置 `WANDB_RUN_GROUP=pi0_lora_baseline`。

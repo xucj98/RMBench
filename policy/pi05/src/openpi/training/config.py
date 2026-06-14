@@ -611,20 +611,6 @@ def _robotwin_aloha_key_state_data(repo_id: str) -> LeRobotAlohaKeyStateDataConf
     )
 
 
-def _pi0_robotwin_lora_config(name: str, repo_id: str) -> TrainConfig:
-    model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
-    return TrainConfig(
-        name=name,
-        model=model,
-        data=_robotwin_aloha_data(repo_id),
-        freeze_filter=model.get_freeze_filter(),
-        batch_size=32,
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
-        num_train_steps=30_000,
-        fsdp_devices=1,
-    )
-
-
 def _pi0_robotwin_lora_baseline_config() -> TrainConfig:
     model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
     return TrainConfig(
@@ -728,16 +714,7 @@ _CONFIGS = [
         batch_size=32,
         fsdp_devices=2,  # refer line 359
     ),
-    _pi0_robotwin_lora_config("pi0_aloha_swap_blocks_lora", "swap_blocks_demo_clean"),
-    _pi0_robotwin_lora_config("pi0_aloha_swap_T_lora", "swap_T_demo_clean"),
-    _pi0_robotwin_lora_config("pi0_aloha_put_back_block_lora", "put_back_block_demo_clean"),
     _pi0_robotwin_lora_baseline_config(),
-    _pi0_robotwin_lora_config("pi0_aloha_observe_and_pickup_lora", "observe_and_pickup_demo_clean"),
-    _pi0_robotwin_lora_config("pi0_aloha_rearrange_blocks_lora", "rearrange_blocks_demo_clean"),
-    _pi0_robotwin_lora_config("pi0_aloha_cover_blocks_lora", "cover_blocks_demo_clean"),
-    _pi0_robotwin_lora_config("pi0_aloha_battery_try_lora", "battery_try_demo_clean"),
-    _pi0_robotwin_lora_config("pi0_aloha_press_button_lora", "press_button_demo_clean"),
-    _pi0_robotwin_lora_config("pi0_aloha_blocks_ranking_try_lora", "blocks_ranking_try_demo_clean"),
     _pi0_robotwin_key_state_lora_config(
         "pi0_aloha_put_back_block_key_state_default_lora",
         "put_back_block_demo_clean_key_state_default",
