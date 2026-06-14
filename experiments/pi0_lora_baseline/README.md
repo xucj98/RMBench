@@ -2,33 +2,27 @@
 
 Batch ID: `pi0_lora_baseline`
 
-本批实验记录 pi0 LoRA 在 RMBench 上的 baseline 进度，并用已完成的三任务 checkpoint 验证 `get_obs_fast` 评测加速改动是否保持结果一致。
-
-这里不单独创建 fast obs batch：fast obs 不是新的训练 recipe，也不是新的 baseline 模型，而是同一批 pi0 LoRA checkpoint 上的 eval implementation validation。主 baseline 结果只采用 original obs；fast obs 结果单独列为验证表，不混入 baseline 对比。后续如果要系统测试 fast obs 对更多 policy、task 或 seed 的影响，应另建单独 batch。
+本批实验记录 pi0 LoRA 在 RMBench 9 个任务上的 baseline。9 个任务的 LoRA checkpoint 已经训练完成；当前正在统一复跑 100-rollout eval，每个任务前 5 个 episode 录制视频。
 
 ## 实验范围
-
-当前已有正式 baseline 结果：
 
 ```text
 policy: pi05 deploy pi0 checkpoint
 train recipe: pi0 LoRA
-tasks: swap_blocks, swap_T, put_back_block
+tasks:
+  swap_blocks
+  swap_T
+  put_back_block
+  observe_and_pickup
+  rearrange_blocks
+  cover_blocks
+  battery_try
+  press_button
+  blocks_ranking_try
 task_config: demo_clean_eval
 instruction_type: unseen
 checkpoint_id: 30000
-test_num: 50
-```
-
-2026-06-11 开始补齐剩余 6 个任务的 pi0 LoRA 训练。训练完成并评测前，这 6 个任务不进入 baseline 结果表：
-
-```text
-observe_and_pickup
-rearrange_blocks
-cover_blocks
-battery_try
-press_button
-blocks_ranking_try
+eval: 100 rollouts, first 5 videos
 ```
 
 不纳入正式 baseline：
@@ -41,106 +35,104 @@ key-state 消融
 pi05 full finetune swap_blocks
 ```
 
-## 已完成检查点
+## Checkpoint 和 Assets
 
-| Task | Train config | Checkpoint | wandb id |
+本批 checkpoint 统一整理到：
+
+```text
+policy/pi05/checkpoints/pi0_lora_baseline/<task_name>/
+```
+
+每个任务使用 step `30000` 评测；目录中也保留历史 step `20000`。集中 norm stats 放在：
+
+```text
+policy/pi05/assets/pi0_lora_baseline/<repo_id>/norm_stats.json
+```
+
+checkpoint step 目录内部也保留训练时写入的 assets 副本：
+
+```text
+policy/pi05/checkpoints/pi0_lora_baseline/<task_name>/30000/assets/<repo_id>/norm_stats.json
+```
+
+为了让 eval 直接按整理后的 checkpoint 路径加载，本批新增聚合配置：
+
+```text
+train_config_name: pi0_lora_baseline
+model_name: <task_name>
+```
+
+该配置只用于统一加载和后续复跑入口；模型结构、LoRA 设置和 robotwin aloha transform 与原 9 个 `pi0_aloha_<task>_lora` 配置保持一致。eval 时 norm stats 从 checkpoint step 内部的 assets 加载。
+
+| Task | Repo ID | Checkpoint | wandb id |
 | --- | --- | --- | --- |
-| `swap_blocks` | `pi0_aloha_swap_blocks_lora` | `policy/pi05/checkpoints/pi0_aloha_swap_blocks_lora/pi0_swap_blocks/30000` | `rd0z38mb` |
-| `swap_T` | `pi0_aloha_swap_T_lora` | `policy/pi05/checkpoints/pi0_aloha_swap_T_lora/pi0_swap_T/30000` | `ltl1wiho` |
-| `put_back_block` | `pi0_aloha_put_back_block_lora` | `policy/pi05/checkpoints/pi0_aloha_put_back_block_lora/pi0_put_back_block/30000` | `gdambjg2` |
+| `swap_blocks` | `swap_blocks_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/swap_blocks/30000` | `rd0z38mb` |
+| `swap_T` | `swap_T_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/swap_T/30000` | `ltl1wiho` |
+| `put_back_block` | `put_back_block_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/put_back_block/30000` | `gdambjg2` |
+| `observe_and_pickup` | `observe_and_pickup_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/observe_and_pickup/30000` | `1r6rl3qb` |
+| `rearrange_blocks` | `rearrange_blocks_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/rearrange_blocks/30000` | `1hq968wc` |
+| `cover_blocks` | `cover_blocks_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/cover_blocks/30000` | `ouvfun15` |
+| `battery_try` | `battery_try_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/battery_try/30000` | `ey3f89cy` |
+| `press_button` | `press_button_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/press_button/30000` | `qzefa4zv` |
+| `blocks_ranking_try` | `blocks_ranking_try_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/blocks_ranking_try/30000` | `hdc73kyc` |
 
-这些 checkpoint 目录下也保留了 step `20000`，但本批 eval 使用 `checkpoint_id: 30000`。
+## 当前 100-Rollout Eval
 
-## 剩余 6 任务训练
-
-批量入口：
-
-```bash
-python experiments/pi0_lora_baseline/run_missing_tasks.py
-```
-
-该脚本按顺序执行：
-
-```text
-process_data -> convert_lerobot -> compute_norm_stats -> launch_train
-```
-
-训练 checkpoint 仍使用 openpi 默认规则：
-
-```text
-policy/pi05/checkpoints/<train_config_name>/<model_name>/
-```
-
-本轮预计落点：
-
-| Task | Train config | Model name | GPU |
-| --- | --- | --- | ---: |
-| `observe_and_pickup` | `pi0_aloha_observe_and_pickup_lora` | `pi0_observe_and_pickup` | 1 |
-| `rearrange_blocks` | `pi0_aloha_rearrange_blocks_lora` | `pi0_rearrange_blocks` | 2 |
-| `cover_blocks` | `pi0_aloha_cover_blocks_lora` | `pi0_cover_blocks` | 3 |
-| `battery_try` | `pi0_aloha_battery_try_lora` | `pi0_battery_try` | 4 |
-| `press_button` | `pi0_aloha_press_button_lora` | `pi0_press_button` | 5 |
-| `blocks_ranking_try` | `pi0_aloha_blocks_ranking_try_lora` | `pi0_blocks_ranking_try` | 6 |
-
-日志和启动 manifest 写入：
-
-```text
-policy/pi05/checkpoints/_launch_logs/pi0_lora_baseline/<timestamp>/
-```
-
-## 运行方式
-
-训练单个任务：
+启动命令：
 
 ```bash
-cd policy/pi05
-PYTHONPATH=src .venv/bin/python scripts/train.py \
-  <train_config_name> \
-  --exp-name=<model_name> \
-  --checkpoint-base-dir=checkpoints
+python experiments/pi0_lora_baseline/run_eval_all.py \
+  --run-tag 20260614_pi0_baseline_100 \
+  --test-num 100 \
+  --eval-video-count 5 \
+  --xla-mem-fraction 0.4
 ```
 
-其中：
+只使用 GPU 5/6/7。根据 `task_config/_eval_step_limit.yml` 的 step limit 做手动均衡，每张卡串行跑 3 个任务：
+
+| GPU | Tasks | Step-limit sum |
+| ---: | --- | ---: |
+| 5 | `blocks_ranking_try` -> `put_back_block` -> `observe_and_pickup` | 4250 |
+| 6 | `cover_blocks` -> `battery_try` -> `swap_T` | 3100 |
+| 7 | `press_button` -> `swap_blocks` -> `rearrange_blocks` | 3200 |
+
+本轮 eval manifest：
 
 ```text
-<train_config_name>: pi0_aloha_<task>_lora
-<model_name>: pi0_<task>
+eval_result/pi0_lora_baseline/_workers_20260614_pi0_baseline_100.json
 ```
 
-评测单个任务：
-
-```bash
-CUDA_VISIBLE_DEVICES=<gpu_id> XLA_PYTHON_CLIENT_MEM_FRACTION=0.4 \
-  policy/pi05/.venv/bin/python script/eval_policy.py --config policy/pi05/deploy_policy.yml \
-  --overrides \
-  --task_name <task> \
-  --task_config demo_clean_eval \
-  --train_config_name <train_config_name> \
-  --model_name <model_name> \
-  --ckpt_setting <model_name> \
-  --seed 0 \
-  --policy_name pi05 \
-  --test_num 50
-```
-
-评测配置来自：
+worker 状态：
 
 ```text
-policy/pi05/deploy_policy.yml
+eval_result/pi0_lora_baseline/_worker_gpu5_20260614_pi0_baseline_100.json
+eval_result/pi0_lora_baseline/_worker_gpu6_20260614_pi0_baseline_100.json
+eval_result/pi0_lora_baseline/_worker_gpu7_20260614_pi0_baseline_100.json
 ```
 
-关键参数：
+eval result 目录规则：
 
 ```text
-checkpoint_id: 30000
-pi0_step: 50
-instruction_type: unseen
-eval_video_count: 5
+eval_result/pi0_lora_baseline/<task>_raw_100_video5_20260614_pi0_baseline_100/
 ```
 
-## 基线结果
+本轮结果完成后，将把 `_result.txt` 中的 success rate 汇总到下表：
 
-主 baseline 使用 original obs 评测结果。
+| Task | Result | Success | Eval result |
+| --- | ---: | ---: | --- |
+| `swap_blocks` | pending | pending | `eval_result/pi0_lora_baseline/swap_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `swap_T` | pending | pending | `eval_result/pi0_lora_baseline/swap_T_raw_100_video5_20260614_pi0_baseline_100` |
+| `put_back_block` | pending | pending | `eval_result/pi0_lora_baseline/put_back_block_raw_100_video5_20260614_pi0_baseline_100` |
+| `observe_and_pickup` | pending | pending | `eval_result/pi0_lora_baseline/observe_and_pickup_raw_100_video5_20260614_pi0_baseline_100` |
+| `rearrange_blocks` | pending | pending | `eval_result/pi0_lora_baseline/rearrange_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `cover_blocks` | pending | pending | `eval_result/pi0_lora_baseline/cover_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `battery_try` | pending | pending | `eval_result/pi0_lora_baseline/battery_try_raw_100_video5_20260614_pi0_baseline_100` |
+| `press_button` | pending | pending | `eval_result/pi0_lora_baseline/press_button_raw_100_video5_20260614_pi0_baseline_100` |
+| `blocks_ranking_try` | pending | pending | `eval_result/pi0_lora_baseline/blocks_ranking_try_raw_100_video5_20260614_pi0_baseline_100` |
+
+## 历史 3 任务结果
+
+早期只验证了 3 个任务，使用旧路径和 50 rollouts。它们不是本批最终 9-task baseline，只保留作为历史记录。
 
 | Task | Result | Success | Paper Pi0.5 | Source |
 | --- | ---: | ---: | ---: | --- |
@@ -148,18 +140,9 @@ eval_video_count: 5
 | `swap_T` | 8/50 | 16% | 15% | `eval_result/swap_T/pi05/demo_clean_eval/pi0_swap_T/2026-06-01 16:27:39/_result.txt` |
 | `put_back_block` | 4/50 | 8% | 11% | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block/2026-06-01 16:27:39/_result.txt` |
 
-三个任务的平均成功率：
-
-```text
-pi0 LoRA baseline: 12.7%
-paper Pi0.5: 16.7%
-```
-
-结论：当前 pi0 LoRA baseline 只覆盖 3 个任务，不是 RMBench Table 1 的完整 Pi0.5 复现。`swap_T` 接近论文值，`swap_blocks` 和 `put_back_block` 低于论文。
-
 ## Fast Obs 正确性验证
 
-fast obs 使用同一批 checkpoint，只改变 eval 中 action chunk 内的 observation 更新方式：跳过重复图像渲染，复用 cached image，并更新必要的 qpos / joint action 观测。该改动目标是加速 eval，不改变策略输入语义。
+fast obs 使用同一批旧 checkpoint，只改变 eval 中 action chunk 内的 observation 更新方式。该验证不混入 baseline 主表。
 
 | Task | Original obs | Fast obs | Delta | Source |
 | --- | ---: | ---: | ---: | --- |
@@ -167,46 +150,11 @@ fast obs 使用同一批 checkpoint，只改变 eval 中 action chunk 内的 obs
 | `swap_T` | 8/50 = 16% | 8/50 = 16% | 0 pp | `eval_result/swap_T/pi05/demo_clean_eval/pi0_swap_T_fastobs/2026-06-01 18:16:10/_result.txt` |
 | `put_back_block` | 4/50 = 8% | 4/50 = 8% | 0 pp | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_fastobs/2026-06-01 18:25:41/_result.txt` |
 
-验证结论：
-
-```text
-swap_T 和 put_back_block 成功率完全一致。
-swap_blocks 差异为 2/50，需按仿真随机性或 observation 更新细节差异看待。
-```
-
-因此 fast obs 可以作为 eval 加速实现继续使用，但如果结果用于论文级对比，仍应明确记录 eval variant。
-
-## 产物规则
-
-训练产物：
-
-```text
-policy/pi05/checkpoints/<train_config_name>/<model_name>/
-```
-
-评测产物：
-
-```text
-eval_result/<task>/pi05/demo_clean_eval/<model_name>/<timestamp>/
-eval_result/<task>/pi05/demo_clean_eval/<model_name>_fastobs/<timestamp>/
-```
-
-wandb：
+## wandb
 
 ```text
 project: RMBench
-expected group for future reruns: pi0_lora_baseline
-historical run ids: rd0z38mb, ltl1wiho, gdambjg2
+group: pi0_lora_baseline
 ```
 
-## 已知问题
-
-历史结果缺少统一 metadata：
-
-```text
-run commit: not_recorded
-eval wandb id: not_recorded
-batch_id in artifacts: not_recorded
-```
-
-这批结果可以通过 checkpoint、`wandb_id.txt` 和 `eval_result` 定位，但不能视为完全规范化的可复现实验记录。后续复跑时应在 checkpoint metadata、eval_result metadata 或 wandb config 中记录 `batch_id=pi0_lora_baseline`、commit、训练命令、评测命令、checkpoint 引用和 eval_result 引用。
+历史 3 个 run 的 group 不一定完整规范；剩余 6 个训练通过 `run_missing_tasks.py` 设置了 `WANDB_RUN_GROUP=pi0_lora_baseline`。
