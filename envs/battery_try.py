@@ -48,6 +48,9 @@ class battery_try(Base_Task):
         self.quat_of_target_pose_1 = np.array([0.0, 0.0, 0.707, -0.707], dtype=np.float64)
         self.combination_lst = [[0,0], [1,0], [1,1], [0,1]]
         self.correct_combination = self.combination_lst[np.random.randint(1, len(self.combination_lst))]
+
+    def _combination_name(self, combination):
+        return "".join(str(int(value)) for value in combination)
     
     def set_dashboard_off(self, joint_names=['needle_joint'], target=0.0): 
         art = self.battery_slot.actor if hasattr(self.battery_slot, "actor") else self.battery_slot   
@@ -140,7 +143,11 @@ class battery_try(Base_Task):
             self.set_dashboard_on()
  
     def play_once(self):
+        actual_trial_sequence = []
+        dashboard_on_after_trial = None
         for idx, next_comb in enumerate(self.combination_lst):
+            stage_name = "place_initial_00" if idx == 0 else f"try_{self._combination_name(next_comb)}"
+            start = self._key_state_stage_start()
             arm_tag = ArmTag("left" if self.battery1.get_pose().p[0] < 0 else "right")
             if idx == 0:
                 self.move(
@@ -160,10 +167,26 @@ class battery_try(Base_Task):
             else:
                 self.place_for_battery1(arm_tag, next_comb[0])
                 self.place_for_battery2(arm_tag.opposite, next_comb[1])
+            self._record_key_state_micro_stage(stage_name, start)
             curr_state = self.get_curr_combination()
+            actual_trial_sequence.append(self._combination_name(curr_state))
             if curr_state == self.correct_combination:
+                dashboard_on_after_trial = self._combination_name(curr_state)
                 break
-        self.info['info'] = {}
+        self._set_key_state_scene_info(
+            task_facts={
+                "correct_combination": self._combination_name(self.correct_combination),
+                "trial_order": [self._combination_name(item) for item in self.combination_lst],
+                "actual_trial_sequence": actual_trial_sequence,
+                "dashboard_on_after_trial": dashboard_on_after_trial,
+            },
+            phase_sequence=[
+                "place_initial_00",
+                "try_10",
+                "try_11",
+                "try_01",
+            ],
+        )
         return self.info
 
     def check_success(self):

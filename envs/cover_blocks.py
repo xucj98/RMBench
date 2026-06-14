@@ -59,7 +59,9 @@ class cover_blocks(Base_Task):
             )
 
         block_id_list = np.random.permutation([0,1,2]).tolist() 
+        self.block_color_ids_by_position = block_id_list
         color_tuple = [(1,0,0), (0,1,0), (0,0,1)]
+        self.color_name_by_id = ["red", "green", "blue"]
         self.blocks = []
         for i in range(len(block_pose_lst)):
             block_position, block_color = block_pose_lst[i], color_tuple[block_id_list[i]]
@@ -76,6 +78,11 @@ class cover_blocks(Base_Task):
         self.current_state_pointer = 0
         self.fail_flag = False
         self.close_cover_palce_lst = [[block_pose.p[0], block_pose.p[1]] for block_pose in block_pose_lst]
+        self.rgb_positions = {
+            self.color_name_by_id[color_id]: self.cover_name[position_id]
+            for position_id, color_id in enumerate(block_id_list)
+        }
+        self.open_order_positions = [self.cover_name[position_id] for position_id in self.open_lst]
         
     def check_if_cover(self, id):
         cover_pose = self.covers[id].get_pose().p
@@ -92,21 +99,43 @@ class cover_blocks(Base_Task):
             if arm_tag == self.last_gripper or self.last_gripper == None:
                 self.pick_and_place_cover(i)
             else:
+                start = self._key_state_stage_start()
                 self.move(self.back_to_origin(arm_tag=self.last_gripper), language_annotation=self.last_annotation)
+                self._record_key_state_micro_stage(f"{self.last_stage_prefix}_return", start)
                 self.pick_and_place_cover(i)
             self.update_state_transition()
+        start = self._key_state_stage_start()
         self.move(self.back_to_origin(arm_tag=self.last_gripper), language_annotation=f"Cover the {name} block with the {name} cover.")
+        self._record_key_state_micro_stage(f"{self.last_stage_prefix}_return", start)
         self.block_gripper = None
         for i in self.open_lst:
             arm_tag = ArmTag("left" if self.blocks[i].get_pose().p[0]<0 else "right")
             if arm_tag == self.block_gripper or self.block_gripper == None:
                 self.open_cover(i)
             else:
+                start = self._key_state_stage_start()
                 self.move(self.back_to_origin(arm_tag=self.block_gripper), language_annotation=self.last_annotation)
+                self._record_key_state_micro_stage(f"{self.last_open_stage_prefix}_return", start)
                 self.open_cover(i)
             self.update_state_transition()
+        start = self._key_state_stage_start()
         self.move(self.back_to_origin(arm_tag=self.block_gripper), language_annotation=self.last_annotation)
-        self.info["info"] = {}
+        self._record_key_state_micro_stage(f"{self.last_open_stage_prefix}_return", start)
+        self._set_key_state_scene_info(
+            task_facts={
+                "rgb_positions": self.rgb_positions,
+                "open_order_positions": self.open_order_positions,
+                "target_state_transition": self.target_state_transition,
+            },
+            phase_sequence=[
+                "cover_left_position",
+                "cover_middle_position",
+                "cover_right_position",
+                "uncover_red_block",
+                "uncover_green_block",
+                "uncover_blue_block",
+            ],
+        )
         return self.info
 
     def pick_and_place_cover(self, cover_id, target_pose=None):
@@ -116,10 +145,16 @@ class cover_blocks(Base_Task):
         x, y = block_pose[0], block_pose[1]
         target_pose = [x, y, 0.741]
         name = ["left", "middle", "right"][cover_id]
+        self.last_stage_prefix = f"cover_{name}_position"
         self.last_annotation = f"Cover the {name} block with the {name} cover."
         arm_tag = ArmTag("left" if cover_pose[0]<0 else "right")
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(cover, arm_tag=arm_tag, pre_grasp_dis=0.05), language_annotation=f"Cover the {name} block with the {name} cover.")
+        self._record_key_state_micro_stage(f"{self.last_stage_prefix}_pick", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.05), language_annotation=f"Cover the {name} block with the {name} cover.")
+        self._record_key_state_micro_stage(f"{self.last_stage_prefix}_lift", start)
+        start = self._key_state_stage_start()
         self.move(
             self.place_actor(
                 cover,
@@ -129,7 +164,10 @@ class cover_blocks(Base_Task):
                 pre_dis=0.05,
                 dis=0.005,
         ), language_annotation=f"Cover the {name} block with the {name} cover.")
+        self._record_key_state_micro_stage(f"{self.last_stage_prefix}_place", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.1), language_annotation=f"Cover the {name} block with the {name} cover.")
+        self._record_key_state_micro_stage(f"{self.last_stage_prefix}_release", start)
         self.last_annotation
         self.last_gripper = arm_tag
     
@@ -138,8 +176,15 @@ class cover_blocks(Base_Task):
         x, y = block_pose[0], block_pose[1]
         target_pose = [x, y+0.13, 0.741]
         arm_tag = ArmTag("left" if block_pose[0] < 0 else "right")
+        color_name = self.color_name_by_id[self.block_color_ids_by_position[block_color_id]]
+        self.last_open_stage_prefix = f"uncover_{color_name}_block"
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(self.covers[block_color_id], arm_tag=arm_tag, pre_grasp_dis=0.05), language_annotation=f'Open the {self.cover_name[block_color_id]} cover to uncover the blocks in the order of red, green, and blue.')
+        self._record_key_state_micro_stage(f"{self.last_open_stage_prefix}_pick", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.05), language_annotation=f'Open the {self.cover_name[block_color_id]} cover to uncover the blocks in the order of red, green, and blue.')
+        self._record_key_state_micro_stage(f"{self.last_open_stage_prefix}_lift", start)
+        start = self._key_state_stage_start()
         self.move(
             self.place_actor(
                 self.covers[block_color_id],
@@ -149,7 +194,10 @@ class cover_blocks(Base_Task):
                 pre_dis=0.05,
                 dis=0.005,
         ), language_annotation=f'Open the {self.cover_name[block_color_id]} cover to uncover the blocks in the order of red, green, and blue.')
+        self._record_key_state_micro_stage(f"{self.last_open_stage_prefix}_place", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.03), language_annotation=f'Open the {self.cover_name[block_color_id]} cover to uncover the blocks in the order of red, green, and blue.')
+        self._record_key_state_micro_stage(f"{self.last_open_stage_prefix}_release", start)
         self.last_annotation = f'Open the {self.cover_name[block_color_id]} cover to uncover the blocks in the order of red, green, and blue.'
         self.block_gripper = arm_tag
     

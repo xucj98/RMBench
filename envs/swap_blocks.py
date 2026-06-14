@@ -82,6 +82,9 @@ class swap_blocks(Base_Task):
         self.set_button_unpressed(self.button)
         self.press_cnt = 0
         self.press_flag = False
+        self.initial_empty_tray = self.backset_name[self.empty_basket_idx]
+        self.first_origin_tray = self.backset_name[self.with_block_basket_idx_1]
+        self.second_origin_tray = self.backset_name[self.with_block_basket_idx_2]
 
     def get_current_button_value(self, button_name, button_actor, joint_name="button_joint", target=0.0):
         if button_name == 'button':
@@ -158,30 +161,71 @@ class swap_blocks(Base_Task):
         basket3_center_pose = self.baskets[self.empty_basket_idx].get_functional_point(0)
 
         arm_tag = self.choose_arm(self.baskets[self.with_block_basket_idx_1], self.baskets[self.empty_basket_idx])
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(self.block1, arm_tag=arm_tag, pre_grasp_dis=0.09, grasp_dis=0.02), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(1)} block and move it to the {self.backset_name[self.empty_basket_idx]} tray.")
+        self._record_key_state_micro_stage("first_pick", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.06), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(1)} block and move it to the {self.backset_name[self.empty_basket_idx]} tray.")
+        self._record_key_state_micro_stage("first_lift", start)
+        start = self._key_state_stage_start()
         self.move(self.place_actor(self.block1, arm_tag=arm_tag, functional_point_id=2, constrain="free", target_pose=basket3_center_pose, pre_dis=0.07), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(1)} block and move it to the {self.backset_name[self.empty_basket_idx]} tray.")
+        self._record_key_state_micro_stage("first_place", start)
         self.is_two_blocks(self.block1,self.block2)
+        start = self._key_state_stage_start()
         self.move(self.back_to_origin(arm_tag=arm_tag), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(1)} block and move it to the {self.backset_name[self.empty_basket_idx]} tray.")
+        self._record_key_state_micro_stage("first_return", start)
 
         arm_tag = self.choose_arm(self.baskets[self.with_block_basket_idx_1], self.baskets[self.with_block_basket_idx_2])
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(self.block2, arm_tag=arm_tag, pre_grasp_dis=0.09, grasp_dis=0.02), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(2)} block and move it to the {self.backset_name[self.with_block_basket_idx_1]} tray.")
+        self._record_key_state_micro_stage("second_pick", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.06), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(2)} block and move it to the {self.backset_name[self.with_block_basket_idx_1]} tray.")
+        self._record_key_state_micro_stage("second_lift", start)
+        start = self._key_state_stage_start()
         self.move(self.place_actor(self.block2, arm_tag=arm_tag, functional_point_id=2, constrain="free", target_pose=basket1_center_pose), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(2)} block and move it to the {self.backset_name[self.with_block_basket_idx_1]} tray.")
+        self._record_key_state_micro_stage("second_place", start)
         self.is_two_blocks(self.block1,self.block2)
+        start = self._key_state_stage_start()
         self.move(self.back_to_origin(arm_tag=arm_tag), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(2)} block and move it to the {self.backset_name[self.with_block_basket_idx_1]} tray.")
+        self._record_key_state_micro_stage("second_return", start)
         
         arm_tag = self.choose_arm(self.baskets[self.with_block_basket_idx_2], self.baskets[self.empty_basket_idx])
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(self.block1, arm_tag=arm_tag, pre_grasp_dis=0.09, grasp_dis=0.02), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(1)} block and move it to the {self.backset_name[self.with_block_basket_idx_2]} tray.")
+        self._record_key_state_micro_stage("first_temp_pick", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.06), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(1)} block and move it to the {self.backset_name[self.with_block_basket_idx_2]} tray.")
+        self._record_key_state_micro_stage("first_temp_lift", start)
+        start = self._key_state_stage_start()
         self.move(self.place_actor(self.block1, arm_tag=arm_tag, functional_point_id=2, constrain="free", target_pose=basket2_center_pose), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(1)} block and move it to the {self.backset_name[self.with_block_basket_idx_2]} tray.")
+        self._record_key_state_micro_stage("first_to_second_place", start)
         self.is_two_blocks(self.block1,self.block2)
+        start = self._key_state_stage_start()
         self.move(self.back_to_origin(arm_tag=arm_tag), language_annotation=f"Use {arm_tag} arm to pick up the {self.get_block_pose(1)} block and move it to the {self.backset_name[self.with_block_basket_idx_2]} tray.")
+        self._record_key_state_micro_stage("first_temp_return", start)
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(self.button, arm_tag="left", pre_grasp_dis=0.08, grasp_dis=0.08,contact_point_id=0,),
                    language_annotation='Press the button.')
+        self._record_key_state_micro_stage("button_approach", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag="left", z=-0.04), language_annotation='Press the button.')
+        self._record_key_state_micro_stage("button_press", start)
         self.update_press_success(self.button, "press_flag", "press_cnt")
-        self.info["info"] = {}
+        self._set_key_state_scene_info(
+            task_facts={
+                "initial_empty_tray": self.initial_empty_tray,
+                "first_origin_tray": self.first_origin_tray,
+                "second_origin_tray": self.second_origin_tray,
+                "tray_positions": self.backset_name,
+            },
+            phase_sequence=[
+                "move_first_block_to_empty_tray",
+                "move_second_block_to_first_origin",
+                "move_first_block_to_second_origin",
+                "press_button",
+            ],
+        )
         return self.info
 
     def is_two_blocks(self, block1, block2):

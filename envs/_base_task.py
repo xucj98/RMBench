@@ -164,9 +164,46 @@ class Base_Task(gym.Env):
             "table_texture": self.table_texture,
         }
         self.info["info"] = {}
+        self._key_state_micro_stages = []
 
         self.stage_success_tag = False
         self.max_reward = 0
+
+    def _json_safe(self, value):
+        if isinstance(value, dict):
+            return {str(key): self._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [self._json_safe(item) for item in value]
+        if isinstance(value, np.ndarray):
+            return self._json_safe(value.tolist())
+        if isinstance(value, np.generic):
+            return value.item()
+        return value
+
+    def _key_state_stage_start(self):
+        return int(self.FRAME_IDX)
+
+    def _record_key_state_micro_stage(self, name, start_frame, end_frame=None):
+        if not hasattr(self, "_key_state_micro_stages"):
+            self._key_state_micro_stages = []
+        start_frame = int(start_frame)
+        end_frame = int(self.FRAME_IDX if end_frame is None else end_frame)
+        self._key_state_micro_stages.append({
+            "name": str(name),
+            "start_frame": start_frame,
+            "end_frame": end_frame,
+        })
+
+    def _set_key_state_scene_info(self, task_facts, phase_sequence=None, extra=None):
+        info = {
+            "task_facts": self._json_safe(task_facts),
+            "micro_stages": self._json_safe(getattr(self, "_key_state_micro_stages", [])),
+        }
+        if phase_sequence is not None:
+            info["phase_sequence"] = self._json_safe(phase_sequence)
+        if extra:
+            info.update(self._json_safe(extra))
+        self.info["info"] = info
 
     def check_stable(self):
         actors_list, actors_pose_list = [], []

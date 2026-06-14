@@ -87,18 +87,47 @@ class rearrange_blocks(Base_Task):
 
         self.first_empty_mat_name = ['left', 'null', 'right'][empty_mat]
         self.second_block_name = ['right', 'null', 'left'][empty_mat]
+        self.initial_occupied_mat_side = self.second_block_name
     
     def play_once(self):
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(self.block1,arm_tag="right",pre_grasp_dis=0.1, grasp_dis=0.02), language_annotation=f'Pick up the {self.first_empty_mat_name} block and move it to the {self.first_empty_mat_name} empty mat.')
+        self._record_key_state_micro_stage("block1_pick", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Pick up the {self.first_empty_mat_name} block and move it to the {self.first_empty_mat_name} empty mat.')
+        self._record_key_state_micro_stage("block1_lift", start)
+        start = self._key_state_stage_start()
         self.move(self.place_actor(self.block1, arm_tag="right", target_pose=self.target_pose1, functional_point_id=2, dis=0.01), language_annotation=f'Pick up the {self.first_empty_mat_name} block and move it to the {self.first_empty_mat_name} empty mat.')
+        self._record_key_state_micro_stage("block1_place", start)
+        start = self._key_state_stage_start()
         self.press_button()
+        self._record_key_state_micro_stage("press_button", start)
+        start = self._key_state_stage_start()
         self.move(self.back_to_origin(arm_tag="left"), language_annotation=f'Press button.')
+        self._record_key_state_micro_stage("press_return", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Pick up the {self.second_block_name} block and move it between the two mats.')
+        self._record_key_state_micro_stage("block2_prepare", start)
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(self.block2,arm_tag="right",pre_grasp_dis=0.1, grasp_dis=0.02), language_annotation=f'Pick up the {self.second_block_name} block and move it between the two mats.')
+        self._record_key_state_micro_stage("block2_pick", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Pick up the {self.second_block_name} block and move it between the two mats.')
+        self._record_key_state_micro_stage("block2_lift", start)
+        start = self._key_state_stage_start()
         self.move(self.place_actor(self.block2, arm_tag="right", target_pose=self.target_pose2, functional_point_id=2, dis=0.01), language_annotation=f'Pick up the {self.second_block_name} block and move it between the two mats.')
-        self.info["info"] = {}
+        self._record_key_state_micro_stage("block2_place", start)
+        self._set_key_state_scene_info(
+            task_facts={
+                "empty_mat_side": self.first_empty_mat_name,
+                "initial_occupied_mat_side": self.initial_occupied_mat_side,
+            },
+            phase_sequence=[
+                "move_middle_block_to_empty_mat",
+                "press_button_after_first_move",
+                "move_original_mat_block_to_middle",
+            ],
+        )
         return self.info
         
     def press_button(self):
