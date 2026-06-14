@@ -2,236 +2,210 @@
 
 Batch ID: `put_back_block_key_state_ablation`
 
-本目录记录 `put_back_block` 上第一批 key-state pi0 LoRA 探索实验。当前结论是：这批实验的训练和数据生成过程还没有完成审计，已评测结果也不好，因此不要把它当作可复现的正式实验批次使用。这里先保留已经能确认的事实，方便排查 failure case 和后续重新设计实验。
+本实验批次围绕 `put_back_block` 的 key-state memory 方案。核心问题是：pi0 单帧观察很难在后期恢复 block 原始所在 mat，因此我们给 policy 增加外部 key-state memory 输入，并让 policy 在 action 中预测下一步 memory。
 
-## 当前状态
+## 结论
+
+1. key-state memory 明显提升 `put_back_block`：pi0 LoRA baseline 是 4/50 = 0.08；key-state default LoRA 是 27/50 = 0.54，另一次 100-rollout 复测是 55/100 = 0.55。
+2. 本批实验只验证 Scheme B，即 per-frame/per-step key-state target；没有实现或评测 Scheme A 的 chunk-level repeated key-state target。
+3. 在 Scheme B 下，`default` 数据处理最好。`mat_first`、`mat_hash_p50`、`wmat_margin10/20`、`phase_lag10/20`、`phase_jitter5` 都没有超过 default。
+4. 当前最合理的解释是：仿真数据干净、数据量小，额外的鲁棒性设计反而引入 label noise、监督稀释或状态和动作不一致。
+5. default 仍只有约 55% 成功率；失败主要集中在按钮阶段的判定或执行。为判断 LoRA 容量是否是瓶颈，已补充 default key-state full finetune 训练，eval 正在运行。
+
+## 实验问题
+
+本批实验回答两个问题：
+
+1. 在 `put_back_block` 上，外部 key-state memory 是否能显著优于普通 pi0 LoRA baseline。
+2. 在已选定 per-step key-state 的 Scheme B 后，哪些 key-state 数据处理细节值得保留为默认方案。
+
+不回答的问题：
+
+1. 不比较 Scheme A 和 Scheme B。Scheme A 需要自定义 dataset/transform 或单独监督头，本批没有实现。
+2. 不证明这些鲁棒性设计在真实噪声数据上无效。本批数据来自仿真，且只有 50 条 demo。
+3. 不把旧训练 launcher 当成完整可复现入口。旧 LoRA 训练的数据生成和启动过程还没有完成审计。
+
+设计细节见 [docs/put_back_block_key_state_design.md](../../docs/put_back_block_key_state_design.md)。
+
+## 方法摘要
+
+key-state 包含两个离散状态：
 
 ```text
+phase_id:
+  0 move_block_to_center
+  1 press_button
+  2 move_block_back_to_origin_mat
+
+mat_id:
+  0 unknown
+  1 left
+  2 right
+  3 front
+  4 back
+```
+
+pi0 的 `observation.state` 和 `action` 从 14 维机器人状态扩到 32 维：
+
+```text
+dim 0:14   robot qpos / robot action
+dim 14:17  phase one-hot
+dim 17:22  mat one-hot
+dim 22:32  zero padding
+```
+
+本批使用 Scheme B：
+
+```text
+action[f, key_dims] = key state after action f
+```
+
+因此 LeRobot 按连续 frame 拼出的 action chunk 中，key-state target 是一条 per-step trajectory。推理时执行 `pi0_step` 个 robot action 后，用第 `pi0_step - 1` 个 action 中的 key-state 预测更新下一次 query 的 memory。
+
+## Variant 定义
+
+8 个 LoRA variant 都使用 `key_output_mode=per_step`，差别只在 key-state input/label 构造。
+
+| Variant | 设计意图 | 数据处理差异 |
+| --- | --- | --- |
+| `default` | 主方案 | phase 输入使用 GT；mat 在 segment 0 内为 unknown，segment 0 结束后变为原始 mat；无 margin、无 jitter |
+| `mat_first` | 测试更早给出 mat memory 是否更好 | 只有第一帧 mat 为 unknown，之后全部给原始 mat |
+| `mat_hash_p50` | 测试 early window 内 known/unknown 混合是否更鲁棒 | segment 0 内用固定 hash 让 50% frame 为 unknown，其余给原始 mat |
+| `wmat_margin10` | 测试更宽 mat acquisition window | segment 0 结束后再延迟 10 帧才给原始 mat |
+| `wmat_margin20` | 测试更宽 mat acquisition window | segment 0 结束后再延迟 20 帧才给原始 mat |
+| `phase_lag10` | 测试 phase memory 滞后时的 recovery | phase boundary 后 10 帧输入仍保持旧 phase，target 使用真实 phase |
+| `phase_lag20` | 测试更强 phase lag recovery | phase boundary 后 20 帧输入仍保持旧 phase，target 使用真实 phase |
+| `phase_jitter5` | 测试 phase 边界不确定性 | 每条 episode 的 phase boundary 加 `[-5, 5]` 帧 jitter |
+
+训练配置和数据集：
+
+| Variant | Train config | Model name | Dataset repo id |
+| --- | --- | --- | --- |
+| `default` | `pi0_aloha_put_back_block_key_state_default_lora` | `pi0_put_back_block_key_state_default` | `put_back_block_demo_clean_key_state_default` |
+| `mat_first` | `pi0_aloha_put_back_block_key_state_mat_first_lora` | `pi0_put_back_block_key_state_mat_first` | `put_back_block_demo_clean_key_state_mat_first` |
+| `mat_hash_p50` | `pi0_aloha_put_back_block_key_state_mat_hash_p50_lora` | `pi0_put_back_block_key_state_mat_hash_p50` | `put_back_block_demo_clean_key_state_mat_hash_p50` |
+| `wmat_margin10` | `pi0_aloha_put_back_block_key_state_wmat_margin10_lora` | `pi0_put_back_block_key_state_wmat_margin10` | `put_back_block_demo_clean_key_state_wmat_margin10` |
+| `wmat_margin20` | `pi0_aloha_put_back_block_key_state_wmat_margin20_lora` | `pi0_put_back_block_key_state_wmat_margin20` | `put_back_block_demo_clean_key_state_wmat_margin20` |
+| `phase_lag10` | `pi0_aloha_put_back_block_key_state_phase_lag10_lora` | `pi0_put_back_block_key_state_phase_lag10` | `put_back_block_demo_clean_key_state_phase_lag10` |
+| `phase_lag20` | `pi0_aloha_put_back_block_key_state_phase_lag20_lora` | `pi0_put_back_block_key_state_phase_lag20` | `put_back_block_demo_clean_key_state_phase_lag20` |
+| `phase_jitter5` | `pi0_aloha_put_back_block_key_state_phase_jitter5_lora` | `pi0_put_back_block_key_state_phase_jitter5` | `put_back_block_demo_clean_key_state_phase_jitter5` |
+
+## 主实验
+
+评测设置：
+
+```text
+eval commit: d9eb4d0ef3e8a3cbf37242d30b1d0c35cb3bfd9a
 task: put_back_block
 policy: pi05 deploy pi0 checkpoint
+task_config: demo_clean_eval
 checkpoint_id: 30000
-已确认 checkpoint: 8 个 variant 在共享存储上存在
-当前保留 eval: default variant 在修复 key-state 推理输入后完成 100-rollout raw/schema_latch 对照，二者均为 55/100
-最近排查: schema_latch 不提升当前 default 模型成功率；失败主要卡在按钮 press gate，见下方排查记录
-训练可复现性: 暂未确认
-```
-
-训练复跑暂时不要按本文档执行。历史 launcher 和训练配置还需要结合 git 历史、数据转换脚本和 wandb metadata 重新核对。
-
-## 变体定义
-
-8 个 variant 的定义来自 `policy/pi05/scripts/run_put_back_block_key_state_experiments.py` 和 `policy/pi05/src/openpi/training/config.py`。下表只说明当前代码里能看到的语义，不表示这些训练过程已经可复现。
-
-| Variant | Train config | Model name | Dataset repo id | Key-state 设置 |
-| --- | --- | --- | --- | --- |
-| `default` | `pi0_aloha_put_back_block_key_state_default_lora` | `pi0_put_back_block_key_state_default` | `put_back_block_demo_clean_key_state_default` | phase 使用 GT；mat 在 `W_mat` 结束前保持 unknown；无 margin；逐步输出 key-state |
-| `mat_first` | `pi0_aloha_put_back_block_key_state_mat_first_lora` | `pi0_put_back_block_key_state_mat_first` | `put_back_block_demo_clean_key_state_mat_first` | phase 使用 GT；mat 只在第一帧 unknown；逐步输出 key-state |
-| `mat_hash_p50` | `pi0_aloha_put_back_block_key_state_mat_hash_p50_lora` | `pi0_put_back_block_key_state_mat_hash_p50` | `put_back_block_demo_clean_key_state_mat_hash_p50` | phase 使用 GT；早期 mat hash mix；`mat_unknown_prob=0.5` |
-| `wmat_margin10` | `pi0_aloha_put_back_block_key_state_wmat_margin10_lora` | `pi0_put_back_block_key_state_wmat_margin10` | `put_back_block_demo_clean_key_state_wmat_margin10` | mat 在 `W_mat` 结束后再延迟 10 帧变为 known |
-| `wmat_margin20` | `pi0_aloha_put_back_block_key_state_wmat_margin20_lora` | `pi0_put_back_block_key_state_wmat_margin20` | `put_back_block_demo_clean_key_state_wmat_margin20` | mat 在 `W_mat` 结束后再延迟 20 帧变为 known |
-| `phase_lag10` | `pi0_aloha_put_back_block_key_state_phase_lag10_lora` | `pi0_put_back_block_key_state_phase_lag10` | `put_back_block_demo_clean_key_state_phase_lag10` | phase 在 boundary 后滞后 10 帧；启用 lag recovery |
-| `phase_lag20` | `pi0_aloha_put_back_block_key_state_phase_lag20_lora` | `pi0_put_back_block_key_state_phase_lag20` | `put_back_block_demo_clean_key_state_phase_lag20` | phase 在 boundary 后滞后 20 帧；启用 lag recovery |
-| `phase_jitter5` | `pi0_aloha_put_back_block_key_state_phase_jitter5_lora` | `pi0_put_back_block_key_state_phase_jitter5` | `put_back_block_demo_clean_key_state_phase_jitter5` | phase boundary 加 5 帧 jitter |
-
-当前代码路径里，这 8 个 variant 都使用 `key_output_mode=per_step`。
-
-## 检查点
-
-以下 step-30000 checkpoint 目录已经确认存在：
-
-```text
-/mnt/public3/xcj/rmbench/pi0_checkpoints/pi0_aloha_put_back_block_key_state_default_lora/pi0_put_back_block_key_state_default/30000
-/mnt/public3/xcj/rmbench/pi0_checkpoints/pi0_aloha_put_back_block_key_state_mat_first_lora/pi0_put_back_block_key_state_mat_first/30000
-/mnt/public3/xcj/rmbench/pi0_checkpoints/pi0_aloha_put_back_block_key_state_mat_hash_p50_lora/pi0_put_back_block_key_state_mat_hash_p50/30000
-/mnt/public3/xcj/rmbench/pi0_checkpoints/pi0_aloha_put_back_block_key_state_wmat_margin10_lora/pi0_put_back_block_key_state_wmat_margin10/30000
-/mnt/public3/xcj/rmbench/pi0_checkpoints/pi0_aloha_put_back_block_key_state_wmat_margin20_lora/pi0_put_back_block_key_state_wmat_margin20/30000
-/mnt/public3/xcj/rmbench/pi0_checkpoints/pi0_aloha_put_back_block_key_state_phase_lag10_lora/pi0_put_back_block_key_state_phase_lag10/30000
-/mnt/public3/xcj/rmbench/pi0_checkpoints/pi0_aloha_put_back_block_key_state_phase_lag20_lora/pi0_put_back_block_key_state_phase_lag20/30000
-/mnt/public3/xcj/rmbench/pi0_checkpoints/pi0_aloha_put_back_block_key_state_phase_jitter5_lora/pi0_put_back_block_key_state_phase_jitter5/30000
-```
-
-`policy/pi05/pi_model.py` 当前从下面的路径加载 eval checkpoint：
-
-```text
-policy/pi05/checkpoints/<train_config_name>/<model_name>/<checkpoint_id>
-```
-
-写本文档时，只有下面 3 个 key-state variant 能通过 `policy/pi05/checkpoints` 访问，并且已经做过历史 eval：
-
-```text
-default
-mat_hash_p50
-phase_jitter5
-```
-
-如果要评测其他 variant，先确认对应 checkpoint 能在 `policy/pi05/checkpoints/<train_config_name>/<model_name>/30000` 访问。
-
-## 训练
-
-训练来源暂时还不可靠，不应写成可复现入口。
-
-已知相关代码位置：
-
-```text
-policy/pi05/scripts/run_put_back_block_key_state_experiments.py
-policy/pi05/src/openpi/training/config.py
-policy/pi05/examples/aloha_real/convert_robotwin_key_state_to_lerobot.py
-```
-
-写训练复现命令前，应先检查下面几个历史 commit 中的数据生成和转换逻辑：
-
-```text
-80c224c2c58c7ae24ff52bb553471ac5a64a59d6
-f6de7ff05ed5311a535b1006093825d9b1b3963e
-1eeadd24eaf9e533ed45ceb6b22e1f7f390e9f45
-```
-
-在数据源、转换命令、norm stats 生成、训练命令、运行 commit 和 wandb metadata 对齐之前，不要把旧 launcher 当成权威训练入口。
-
-## 评测
-
-当前 repo 级 eval 入口是：
-
-```text
-script/eval_policy.py
-```
-
-pi05 eval 使用 pi05 virtualenv 直接运行：
-
-```bash
-policy/pi05/.venv/bin/python script/eval_policy.py --config policy/pi05/deploy_policy.yml \
-  --overrides \
-  --task_name put_back_block \
-  --task_config demo_clean_eval \
-  --train_config_name <train_config_name> \
-  --model_name <model_name> \
-  --ckpt_setting <ckpt_setting> \
-  --seed 0 \
-  --policy_name pi05 \
-  --test_num 100 \
-  --eval_video_log true \
-  --eval_video_count 5 \
-  --eval_video_key_state_overlay true
-```
-
-注意：`script/eval_policy.py` 默认 `test_num=100`。`task_config/demo_clean_eval.yml` 里的 `episode_num: 50` 不会控制 eval rollout 数。RMBench 论文中的模拟实验表格也是 100 rollouts；之前本地 key-state 和 pi0 baseline 记录里用过 50 rollouts，那是探索设置，不是论文标准设置。
-
-录制 eval 视频时，`envs/_base_task.py::get_obs_for_policy()` 会退回完整 `get_obs()`，不会走 `get_obs_fast()`。这对 failure-case 视频是必要的；不录视频的 episode 仍可能使用 `get_obs_fast()`。
-
-后续 key-state 相关视频评测默认开启 `eval_video_key_state_overlay`。overlay 中显示的 key-state 用来排查策略输出和任务阶段，不代表环境成功条件本身。
-
-## 当前保留结果
-
-下面 3 个 overlay eval 是当前保留的 layout/failure-case 记录。它们评测的是同一批 key-state checkpoint，因此保留在本实验批次下，不单独建目录。每个目录下有 `episode0.mp4` 到 `episode4.mp4`，视频左上角带 key-state overlay。三条结果成功率均为 0.0。
-
-| Variant | Rollouts | Video count | Success rate | Source |
-| --- | ---: | ---: | ---: | --- |
-| `default` | 5 | 5 | 0.0 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_ks_overlay_video5/2026-06-09 01:31:21/_result.txt` |
-| `mat_hash_p50` | 5 | 5 | 0.0 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_mat_hash_p50_mem_ks_overlay_video5/2026-06-09 01:31:22/_result.txt` |
-| `phase_jitter5` | 5 | 5 | 0.0 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_phase_jitter5_mem_ks_overlay_video5/2026-06-09 01:31:22/_result.txt` |
-
-## 2026-06-10 锁存视频排查
-
-为排查 overlay 中 key-state 中途跳变的问题，代码增加了可选的 `key_state_update_mode=schema_latch`。该模式不改变默认评测语义；只有显式指定时才会使用 schema 里的 update rule，让 phase 单步单调推进、mat 首次识别后锁存。
-
-下面这次运行是调试性视频排查，启动后在看到 failure case 后手动停止，不作为正式 eval 指标：
-
-```text
-ckpt_setting: pi0_put_back_block_key_state_default_mem_schema_latch_video5
-train_config_name: pi0_aloha_put_back_block_key_state_default_lora
-model_name: pi0_put_back_block_key_state_default
-checkpoint_id: 30000
-key_state_update_mode: schema_latch
-test_num: 5
+test_num: 50
+seed: 0
+eval seeds: 100000..100049
 eval_video_log: true
-eval_video_count: 5
+eval_video_count: 2
 eval_video_key_state_overlay: true
-result_dir: eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_schema_latch_video5/2026-06-10 21:54:17
+key_state_update_mode: raw
+queue_log: eval_result/put_back_block_key_state_ablation/_queue_20260611_214744.log
 ```
 
-已生成文件：
+每个结果目录下有 `_result.txt`、`eval_log.txt`、`stdout.log`、`config.yaml` 和 `command.txt`。`config.yaml` 保存合并后的配置快照，`command.txt` 由 eval 代码直接记录启动命令和 git commit。
+
+结果：
+
+| Variant | Success | Success rate | Result dir |
+| --- | ---: | ---: | --- |
+| pi0 baseline | 4/50 | 0.08 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block/2026-06-01 16:27:39` |
+| `default` | 27/50 | 0.54 | `eval_result/put_back_block_key_state_ablation/default_raw_50_video2_20260611_214744` |
+| `mat_hash_p50` | 21/50 | 0.42 | `eval_result/put_back_block_key_state_ablation/mat_hash_p50_raw_50_video2_20260611_214744` |
+| `wmat_margin10` | 19/50 | 0.38 | `eval_result/put_back_block_key_state_ablation/wmat_margin10_raw_50_video2_20260611_214744` |
+| `phase_jitter5` | 19/50 | 0.38 | `eval_result/put_back_block_key_state_ablation/phase_jitter5_raw_50_video2_20260611_214744` |
+| `phase_lag10` | 18/50 | 0.36 | `eval_result/put_back_block_key_state_ablation/phase_lag10_raw_50_video2_20260611_214744` |
+| `mat_first` | 16/50 | 0.32 | `eval_result/put_back_block_key_state_ablation/mat_first_raw_50_video2_20260611_214744` |
+| `wmat_margin20` | 15/50 | 0.30 | `eval_result/put_back_block_key_state_ablation/wmat_margin20_raw_50_video2_20260611_214744` |
+| `phase_lag20` | 9/50 | 0.18 | `eval_result/put_back_block_key_state_ablation/phase_lag20_raw_50_video2_20260611_214744` |
+
+default 另有一次 100-rollout 复测：
+
+| Run | key_state_update_mode | Success | Success rate | Result |
+| --- | --- | ---: | ---: | --- |
+| `statefix_raw_100rollout_video5` | `raw` | 55/100 | 0.55 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_raw_100rollout_video5/2026-06-10 22:41:07` |
+| `statefix_schema_latch_100rollout_video5` | `schema_latch` | 55/100 | 0.55 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_schema_latch_100rollout_video5/2026-06-10 22:41:07` |
+
+两组 100-rollout default eval 的 episode 结果逐条一致，因此当前 default 模型不依赖 `schema_latch`；主结果采用默认 `raw`。
+
+## 结果解释
+
+`default` 是最好的数据处理方案。它给模型足够多的早期 `mat=unknown` 样本，让模型学习从早期图像中预测 origin mat；segment 0 结束后再把 mat 写入 memory，避免在后期不可观测图像中重新估计 origin mat。
+
+`mat_first` 显著变差，说明只在每条 episode 第一帧监督 unknown -> mat 不够。`mat_hash_p50` 是第二好，但仍低于 default；它减少了 unknown acquisition 监督，同时让 early memory 状态更不一致。
+
+`wmat_margin10/20` 没有收益，且 margin 越大越差。文档里的默认设计认为 segment 0 是最可靠的 mat acquisition window；进入 segment 1 后 block 已经被抬起，origin mat 的直接视觉证据变弱。
+
+`phase_lag10/20` 和 `phase_jitter5` 都低于 default。它们本来是鲁棒性设计，但当前实现是在原始 frame 上替换 phase input 或扰动 boundary，不复制 recovery 样本，也不改 sampler。对于干净仿真数据和小数据量，这更像引入状态和动作不一致或 label noise。
+
+因此，本批实验支持的默认方案是：Scheme B per-step key-state target、GT phase input、`unknown_until_wmat_end` mat input、`wmat_margin_frames=0`、无 phase jitter、无 phase lag。
+
+## Follow-Up: Default Full Finetune
+
+动机：default LoRA 约 55% 成功率，失败主要集中在按钮阶段。为判断瓶颈是否来自 LoRA 容量或训练方式，补充了同一份 default key-state 数据上的 full finetune。
+
+训练状态：
 
 ```text
-episode0.mp4: 完整生成，eval_log 记录 Fail
-episode1.mp4: 手动停止时的中间产物，不作为完整 episode
-_result.txt: 未生成
-```
-
-初步观察：即使使用 `schema_latch` 稳定 overlay 中的 phase 和 mat，视频里策略看起来仍然没有根据 phase/mat state 切换到不同运动模式；它仍主要在执行 phase 0 的动作，即把物体放到正中间，而不是在后续阶段把物体放回对应 mat。后续检查发现，部署推理时已经生成了 32 维 key-state policy state，但实际传给 policy 的仍是原始 14 维 state。该问题已在 `a6737e5` 修复。
-
-## 2026-06-10 State Input 修复后对照
-
-在 `a6737e5` 修复 pi05 部署时 key-state 推理输入丢失的问题后，对 `default` variant 重新做了 100-rollout eval。两次评测均开启前 5 个 episode 的 overlay 视频录制。
-
-| Run | key_state_update_mode | Rollouts | Success | Success rate | Result |
-| --- | --- | ---: | ---: | ---: | --- |
-| `statefix_raw_100rollout_video5` | `raw` | 100 | 55 | 0.55 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_raw_100rollout_video5/2026-06-10 22:41:07/_result.txt` |
-| `statefix_schema_latch_100rollout_video5` | `schema_latch` | 100 | 55 | 0.55 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_schema_latch_100rollout_video5/2026-06-10 22:41:07/_result.txt` |
-
-两组 eval 的 episode 结果逐条一致：`seed=100000` 到 `seed=100099` 中均为 55 个 Success、45 个 Fail。因此，当前 default 模型的成功率不依赖 `schema_latch`；正常 eval 可以继续使用默认 `raw`，`schema_latch` 主要保留为 overlay/阶段状态排查工具。
-
-为解释失败原因，额外做过一次临时 debug 统计：`schema_latch`、20 rollouts、无视频，结果为 11/20。9 个失败 episode 全部满足：
-
-```text
-press_cnt = 0
-stage_id 从未离开 0
-block 曾到达 center
-block 曾满足最终目标区域几何条件
-```
-
-这说明这批失败不是最终放置位置本身没到，而是环境没有记录到按钮 press，导致 `stage_id` 没有打开最终成功 gate。相关 debug 代码只用于本地排查，不作为正式实验代码提交。
-
-## 2026-06-11 Full Finetune 对照
-
-为比较同一份 default key-state 数据下 LoRA 和全量微调的差异，启动一个 pi0 full finetune 对照。当前 GPU7 空闲，本次使用单卡 `batch_size=32`，并通过 `XLA_PYTHON_CLIENT_MEM_FRACTION=0.95` 提高 XLA 可预分配显存上限。
-
-```text
+status: trained, eval running
+train commit: de1de697d1ab80478afb3852cc9d7d64102aa112
+wandb project: RMBench
+wandb id: u3csuoca
 train_config_name: pi0_aloha_put_back_block_key_state_default_full_b32
 model_name: pi0_put_back_block_key_state_default_full_b32
 dataset repo id: put_back_block_demo_clean_key_state_default
 fine_tune: full
 batch_size: 32
 num_train_steps: 30000
-gpu: 7
-checkpoint_dir: policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_full_b32/pi0_put_back_block_key_state_default_full_b32
+checkpoint_id: 30000
+checkpoint_dir: policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_full_b32/pi0_put_back_block_key_state_default_full_b32/30000
+eval_result_dir: eval_result/put_back_block_key_state_ablation/default_full_b32_raw_100_video5_20260614_170220
+eval_queue_log: eval_result/put_back_block_key_state_ablation/_eval_default_full_b32_raw_100_video5_20260614_170220.log
 ```
 
-该 run 是 full finetune follow-up，不计入上面 8 个 LoRA 消融 variant。若单卡 full finetune 仍出现 OOM，再改为等待多卡空闲后按 FSDP 复跑。
+训练命令来自本地 wandb metadata：
 
-## 历史旁证
+```bash
+cd policy/pi05
+.venv/bin/python scripts/train.py \
+  pi0_aloha_put_back_block_key_state_default_full_b32 \
+  --exp-name=pi0_put_back_block_key_state_default_full_b32 \
+  --checkpoint-base-dir=checkpoints
+```
 
-下面是 3 个已评测 variant 的历史 50-rollout 结果：
+该 follow-up 属于同一 batch，但不计入 8 个数据处理消融 variant。eval 完成后，将在这里补充 LoRA default 和 full finetune default 的对照表。
 
-| Variant | Result | Source |
-| --- | ---: | --- |
-| `default` | 0/50 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem/2026-06-03 15:29:15/_result.txt` |
-| `mat_hash_p50` | 0/50 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_mat_hash_p50_mem/2026-06-03 15:29:15/_result.txt` |
-| `phase_jitter5` | 0/50 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_phase_jitter5_mem/2026-06-03 15:29:14/_result.txt` |
+## 产物
 
-用于对照的 pi0 baseline：
+LoRA checkpoint 根目录：
 
 ```text
-pi0_lora_baseline put_back_block: 4/50 = 8%
-source: eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block/2026-06-01 16:27:39/_result.txt
+policy/pi05/checkpoints/<train_config_name>/<model_name>/30000
+/mnt/public3/xcj/rmbench/pi0_checkpoints/<train_config_name>/<model_name>/30000
 ```
 
-2026-06-09 的非 overlay 100-rollout rerun 也存在：`default` 和 `mat_hash_p50` 为 0/100，`phase_jitter5` 为 1/100。这组结果没有 key-state overlay，不作为当前 failure-case 视频记录；后续分析优先使用上面的 overlay 目录。
-
-名字里有 `video5_rerun` 但没有 `100rollout` 的中断目录，以及名字里有 `50rollout_video5_rerun` 的中断目录，都不要作为结果使用。
-
-## 新实验前需要补齐
-
-重新启动 key-state 实验批次前，应写一个新的实验 README 和 launcher，并明确记录：
+full finetune checkpoint：
 
 ```text
-batch_id
-commit
-data source and conversion command
-train command
-checkpoint path
-eval command
-wandb project/group/id
-success_count / test_num / success_rate
+policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_full_b32/pi0_put_back_block_key_state_default_full_b32/30000
+/mnt/public3/xcj/rmbench/pi05_checkpoints/pi0_aloha_put_back_block_key_state_default_full_b32/pi0_put_back_block_key_state_default_full_b32/30000
 ```
 
-wandb 使用 `project=RMBench`、`group=<batch_id>`。smoke test、中断运行和未完成 eval 不进入结果表。
+主 eval 根目录：
+
+```text
+eval_result/put_back_block_key_state_ablation
+```
+
+训练和数据生成的完整可复现性仍未审计。旧 launcher、数据转换命令和 LoRA 训练 wandb metadata 需要后续从 git 历史和本地产物中补齐；不要把旧 LoRA 训练过程当成已经完整归档的正式入口。
+
+## 附录
+
+调试记录见 [notes_debug.md](notes_debug.md)。早期不作为正式指标的历史结果见 [legacy_results.md](legacy_results.md)。
