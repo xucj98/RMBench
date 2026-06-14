@@ -14,9 +14,121 @@ import traceback
 import os
 import time
 from argparse import ArgumentParser
+from pathlib import Path
+import shlex
+import subprocess
 
 current_file_path = os.path.abspath(__file__)
 parent_directory = os.path.dirname(current_file_path)
+project_root = Path(current_file_path).resolve().parents[1]
+
+
+def get_git_commit():
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=project_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def get_git_status():
+    try:
+        status = subprocess.check_output(
+            ["git", "status", "--short"],
+            cwd=project_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+    return "clean" if not status else status
+
+
+def get_runtime_env():
+    keys = ["CUDA_VISIBLE_DEVICES", "SAPIEN_RENDER_DEVICE", "PYTHONPATH"]
+    return {key: os.environ.get(key) for key in keys if os.environ.get(key) is not None}
+
+
+def to_yaml_safe(value):
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): to_yaml_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [to_yaml_safe(item) for item in value]
+    return value
+
+
+def parse_override_tokens(tokens):
+    overrides = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if "=" in token:
+            key, raw_value = token.split("=", 1)
+            index += 1
+        else:
+            key = token.lstrip("-")
+            if index + 1 >= len(tokens):
+                raise ValueError(f"Missing value for override: {token}")
+            raw_value = tokens[index + 1]
+            index += 2
+        key = key.strip().lstrip("-")
+        if not key:
+            raise ValueError(f"Invalid override key in token: {token}")
+        overrides[key] = yaml.safe_load(raw_value)
+    return overrides
+
+
+def apply_override(config, key, value):
+    cursor = config
+    parts = key.split(".")
+    for part in parts[:-1]:
+        if part not in cursor or not isinstance(cursor[part], dict):
+            cursor[part] = {}
+        cursor = cursor[part]
+    cursor[parts[-1]] = value
+
+
+def apply_overrides(config, overrides):
+    for key, value in overrides.items():
+        apply_override(config, key, value)
+
+
+def write_collect_metadata(args):
+    metadata_dir = Path(args["save_path"]) / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+
+    runtime = args.get("_runtime", {})
+    config_snapshot = {
+        "task_name": args["task_name"],
+        "task_config": args["task_config"],
+        "config_path": runtime.get("config_path"),
+        "overrides": runtime.get("overrides", {}),
+        "resolved_config": {
+            key: value
+            for key, value in args.items()
+            if not key.startswith("_")
+        },
+    }
+    with (metadata_dir / "config.yaml").open("w", encoding="utf-8") as f:
+        yaml.safe_dump(to_yaml_safe(config_snapshot), f, allow_unicode=True, sort_keys=False)
+
+    with (metadata_dir / "command.txt").open("w", encoding="utf-8") as f:
+        f.write(f"commit: {runtime.get('git_commit', 'unknown')}\n")
+        f.write(f"git_status: {runtime.get('git_status', 'unknown')}\n")
+        f.write(f"cwd: {runtime.get('cwd', '')}\n")
+        env = runtime.get("env", {})
+        if env:
+            f.write("env:\n")
+            for key, value in env.items():
+                f.write(f"  {key}={value}\n")
+        f.write("command:\n")
+        f.write(f"  {runtime.get('command', '')}\n")
 
 
 def class_decorator(task_name):
@@ -36,7 +148,7 @@ def get_embodiment_config(robot_file):
     return embodiment_args
 
 
-def main(task_name=None, task_config=None):
+def main(task_name=None, task_config=None, overrides=None):
 
     task = class_decorator(task_name)
     config_path = f"./task_config/{task_config}.yml"
@@ -44,6 +156,8 @@ def main(task_name=None, task_config=None):
     with open(config_path, "r", encoding="utf-8") as f:
         args = yaml.load(f.read(), Loader=yaml.FullLoader)
 
+    overrides = overrides or {}
+    apply_overrides(args, overrides)
     args['task_name'] = task_name
 
     embodiment_type = args.get("embodiment")
@@ -99,6 +213,16 @@ def main(task_name=None, task_config=None):
 
     args["embodiment_name"] = embodiment_name
     args['task_config'] = task_config
+    args["_collection_save_path_base"] = args["save_path"]
+    args["_runtime"] = {
+        "config_path": config_path,
+        "overrides": overrides,
+        "command": " ".join(shlex.quote(item) for item in sys.argv),
+        "cwd": os.getcwd(),
+        "git_commit": get_git_commit(),
+        "git_status": get_git_status(),
+        "env": get_runtime_env(),
+    }
     args["save_path"] = os.path.join(args["save_path"], str(args["task_name"]), args["task_config"])
     run(task, args)
 
@@ -110,6 +234,7 @@ def run(TASK_ENV, args):
 
     # =========== Collect Seed ===========
     os.makedirs(args["save_path"], exist_ok=True)
+    write_collect_metadata(args)
 
     if not args["use_seed"]:
         print("\033[93m" + "[Start Seed and Pre Motion Data Collection]" + "\033[0m")
@@ -241,8 +366,16 @@ def run(TASK_ENV, args):
             TASK_ENV.remove_data_cache()
             assert TASK_ENV.check_success(), "Collect Error"
 
-        command = f"cd description && bash gen_episode_instructions.sh {args['task_name']} {args['task_config']} {args['language_num']}"
-        os.system(command)
+        command = [
+            "bash",
+            "gen_episode_instructions.sh",
+            args["task_name"],
+            args["task_config"],
+            str(args["language_num"]),
+            "--overrides",
+            f"save_path={args['_collection_save_path_base']}",
+        ]
+        subprocess.run(command, cwd="description", check=True)
 
 
 if __name__ == "__main__":
@@ -255,8 +388,9 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("task_name", type=str)
     parser.add_argument("task_config", type=str)
+    parser.add_argument("--overrides", nargs="*", default=[])
     parser = parser.parse_args()
     task_name = parser.task_name
     task_config = parser.task_config
 
-    main(task_name=task_name, task_config=task_config)
+    main(task_name=task_name, task_config=task_config, overrides=parse_override_tokens(parser.overrides))

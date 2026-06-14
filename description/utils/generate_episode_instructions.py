@@ -11,6 +11,42 @@ parent_directory = os.path.dirname(current_file_path)
 project_root = os.path.abspath(os.path.join(parent_directory, "../.."))
 
 
+def parse_override_tokens(tokens):
+    overrides = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if "=" in token:
+            key, raw_value = token.split("=", 1)
+            index += 1
+        else:
+            key = token.lstrip("-")
+            if index + 1 >= len(tokens):
+                raise ValueError(f"Missing value for override: {token}")
+            raw_value = tokens[index + 1]
+            index += 2
+        key = key.strip().lstrip("-")
+        if not key:
+            raise ValueError(f"Invalid override key in token: {token}")
+        overrides[key] = yaml.safe_load(raw_value)
+    return overrides
+
+
+def apply_override(config, key, value):
+    cursor = config
+    parts = key.split(".")
+    for part in parts[:-1]:
+        if part not in cursor or not isinstance(cursor[part], dict):
+            cursor[part] = {}
+        cursor = cursor[part]
+    cursor[parts[-1]] = value
+
+
+def apply_overrides(config, overrides):
+    for key, value in overrides.items():
+        apply_override(config, key, value)
+
+
 def resolve_collection_dir(task_name: str, setting: str, save_path: str) -> str:
     """Return the directory where collect_data.py wrote this task setting."""
     base_dir = save_path if os.path.isabs(save_path) else os.path.join(project_root, save_path)
@@ -273,6 +309,7 @@ if __name__ == "__main__":
         default=100,
         help="Maximum number of descriptions per episode",
     )
+    parser.add_argument("--overrides", nargs="*", default=[])
 
     args = parser.parse_args()
     setting_file = os.path.join(
@@ -280,6 +317,7 @@ if __name__ == "__main__":
     )
     with open(setting_file, "r", encoding="utf-8") as f:
         args_dict = yaml.load(f.read(), Loader=yaml.FullLoader)
+    apply_overrides(args_dict, parse_override_tokens(args.overrides))
 
     # Load scene info and extract episode parameters
     scene_info = load_scene_info(args.task_name, args.setting, args_dict['save_path'])
