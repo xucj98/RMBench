@@ -657,6 +657,20 @@ def _pi0_robotwin_key_state_lora_config(name: str, repo_id: str, variant: dict[s
     )
 
 
+def _pi0_robotwin_key_state_baseline_lora_config() -> TrainConfig:
+    model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
+    return TrainConfig(
+        name="pi0_aloha_key_state_lora",
+        model=model,
+        data=_robotwin_aloha_key_state_data("fake"),
+        freeze_filter=model.get_freeze_filter(),
+        batch_size=32,
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+        fsdp_devices=1,
+    )
+
+
 def _pi0_robotwin_key_state_full_config(
     name: str,
     repo_id: str,
@@ -715,6 +729,7 @@ _CONFIGS = [
         fsdp_devices=2,  # refer line 359
     ),
     _pi0_robotwin_lora_baseline_config(),
+    _pi0_robotwin_key_state_baseline_lora_config(),
     _pi0_robotwin_key_state_lora_config(
         "pi0_aloha_put_back_block_key_state_default_lora",
         "put_back_block_demo_clean_key_state_default",

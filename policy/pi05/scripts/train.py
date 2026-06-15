@@ -1,7 +1,13 @@
 import dataclasses
 import functools
 import logging
+import os
 import platform
+import pathlib
+import shlex
+import shutil
+import subprocess
+import sys
 from typing import Any
 
 import etils.epath as epath
@@ -11,9 +17,11 @@ import flax.traverse_util as traverse_util
 import jax
 import jax.experimental
 import jax.numpy as jnp
+from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
 import optax
 import tqdm_loggable.auto as tqdm
 import wandb
+import yaml
 
 import openpi.models.model as _model
 import openpi.shared.array_typing as at
@@ -25,6 +33,15 @@ import openpi.training.optimizer as _optimizer
 import openpi.training.sharding as sharding
 import openpi.training.utils as training_utils
 import openpi.training.weight_loaders as _weight_loaders
+
+
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[3]
+RMBENCH_META_FILES = [
+    "key_state_config.yaml",
+    "convert_command.txt",
+    "source_data_config.yaml",
+    "source_data_command.txt",
+]
 
 
 def init_logging():
@@ -80,6 +97,96 @@ def init_wandb(
 
     if log_code:
         wandb.run.log_code(epath.Path(__file__).parent.parent)
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def _git_status() -> str:
+    try:
+        status = subprocess.check_output(
+            ["git", "status", "--short"],
+            cwd=PROJECT_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+    return "clean" if not status else status
+
+
+def _runtime_env() -> dict[str, str]:
+    keys = ["CUDA_VISIBLE_DEVICES", "XLA_PYTHON_CLIENT_MEM_FRACTION", "PYTHONPATH", "WANDB_PROJECT", "WANDB_RUN_GROUP"]
+    return {key: os.environ[key] for key in keys if key in os.environ}
+
+
+def _to_yaml_safe(value: Any) -> Any:
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {field.name: _to_yaml_safe(getattr(value, field.name)) for field in dataclasses.fields(value)}
+    if isinstance(value, pathlib.Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _to_yaml_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_yaml_safe(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return repr(value)
+
+
+def _write_train_run_metadata(config: _config.TrainConfig) -> None:
+    metadata_dir = config.checkpoint_dir / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+
+    train_config_path = metadata_dir / "train_config.yaml"
+    with train_config_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(_to_yaml_safe(config), f, allow_unicode=True, sort_keys=False)
+
+    command_path = metadata_dir / "command.txt"
+    with command_path.open("w", encoding="utf-8") as f:
+        f.write(f"commit: {_git_commit()}\n")
+        f.write(f"git_status: {_git_status()}\n")
+        f.write(f"cwd: {pathlib.Path.cwd()}\n")
+        env = _runtime_env()
+        if env:
+            f.write("env:\n")
+            for key, value in env.items():
+                f.write(f"  {key}={value}\n")
+        f.write("command:\n")
+        f.write(f"  {' '.join(shlex.quote(item) for item in sys.argv)}\n")
+
+    paths_to_upload = [train_config_path, command_path]
+    repo_id = getattr(config.data, "repo_id", None)
+    if repo_id and repo_id != "fake":
+        source_meta_dir = pathlib.Path(HF_LEROBOT_HOME) / repo_id / "meta" / "rmbench"
+        if source_meta_dir.exists():
+            target_meta_dir = metadata_dir / "rmbench_data_meta"
+            target_meta_dir.mkdir(parents=True, exist_ok=True)
+            for name in RMBENCH_META_FILES:
+                source = source_meta_dir / name
+                if not source.exists():
+                    raise FileNotFoundError(f"Missing RMBench dataset metadata: {source}")
+                target = target_meta_dir / name
+                shutil.copy2(source, target)
+                paths_to_upload.append(target)
+        elif config.name == "pi0_aloha_key_state_lora":
+            raise FileNotFoundError(f"Missing RMBench dataset metadata directory: {source_meta_dir}")
+
+    if config.wandb_enabled and wandb.run is not None:
+        for path in paths_to_upload:
+            try:
+                wandb.save(str(path), base_path=str(metadata_dir))
+            except Exception as exc:
+                logging.warning("Failed to save %s to wandb: %s", path, exc)
 
 
 def _load_weights_and_validate(loader: _weight_loaders.WeightLoader, params_shape: at.Params) -> at.Params:
@@ -241,6 +348,7 @@ def main(config: _config.TrainConfig):
         resume=config.resume,
     )
     init_wandb(config, resuming=resuming, enabled=config.wandb_enabled)
+    _write_train_run_metadata(config)
 
     data_loader = _data_loader.create_data_loader(
         config,
