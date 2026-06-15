@@ -720,14 +720,16 @@ pi0_key_state_baseline
   7. 在这个 clean commit 上启动正式数据生成、训练或评测。
 
 正式运行后：
-  1. 如果是训练、评测这类长时间任务，确认正式任务已经启动后，先更新并提交 `experiments/pi0_key_state_baseline/README.md`，写清楚命令、commit、路径、wandb id 或运行状态。
-  2. 如果是数据转换这类可能较短的任务，可以等完成后一次更新；如果预计运行很久，也按长时间任务先记录启动状态。
+  1. 如果是训练、评测这类长时间任务，确认正式任务已经启动后，先更新并提交 `experiments/pi0_key_state_baseline/README.md`，写清楚批次状态、目标路径、wandb id 或运行状态。
+  2. 如果是数据转换这类可能较短的任务，可以等完成后一次更新；如果预计运行很久，也按长时间任务先记录目标 repo_id、路径和运行状态。
   3. 正式任务完成后，对照本阶段正式验收标准检查产物和 metadata。
   4. 不提交数据、checkpoint、eval result、视频和大日志。
   5. 再次更新并提交 `experiments/pi0_key_state_baseline/README.md`，补充结果、完成状态、路径、wandb id 和必要结论。
 ```
 
 smoke test 可以在未提交工作区运行。smoke 产物应集中放在容易统一清理的位置，并使用 `_smoke` 或 `data_smoke/` 这类明确名称。LeRobot repo、checkpoint、eval_result 这类 smoke 产物放在对应正式产物的同一父目录下；数据采集 smoke 由于现有路径规则使用 `data_smoke/<task>/demo_clean_state`；norm stats smoke 是例外，直接写正式 `norm_stats.json` 路径，正式训练前重新计算并覆盖。正式运行前删除对应 smoke 产物。smoke 不能进入 `experiments/pi0_key_state_baseline/README.md`。数据、checkpoint、eval result、视频和大日志不进 git；正式阶段启动和完成时才更新并提交 `experiments/pi0_key_state_baseline/README.md`。
+
+`experiments/pi0_key_state_baseline/README.md` 是批次索引和结果摘要，不手写启动时间、git commit、完整命令或环境变量。正式数据、LeRobot repo、checkpoint 和 eval_result 必须由代码在各自产物目录下自动保存 `command.txt`、resolved config 和必要 metadata；复现时以这些自动记录为准。README 只记录实验目的、任务列表、数据/ckpt/eval/wandb 的定位信息、验收摘要、SR 和结论。
 
 当前 `task_config/` 整体被 `.gitignore` 忽略，只有已经进入 git 的少量基础配置可作为正式依赖。本轮应新增一个正式的 `task_config/demo_clean_state.yml`，并用 `git add -f` 纳入 git 管理；正式命令不能依赖本机临时的 `task_config/demo_clean_state_*.yml`。
 
@@ -852,7 +854,7 @@ python script/collect_data.py <task> demo_clean_state
 
 ```text
 不提交 data/<task>/demo_clean_state 大文件。
-提交 `experiments/pi0_key_state_baseline/README.md`，写清楚 data path、生成命令、commit、校验结果。
+提交 `experiments/pi0_key_state_baseline/README.md`，写清楚 data path 和校验结果。
 正式数据生成完成后必须先按验收标准自查，再提交 README 更新。
 ```
 
@@ -1013,15 +1015,15 @@ meta/rmbench/source_data_command.txt
 1. 每个任务都有明确的 repo_id，repo_id 表示数据集内容。
 2. 每个 LeRobot repo 都包含 meta/rmbench/key_state_config.yaml、meta/rmbench/convert_command.txt、meta/rmbench/source_data_config.yaml、meta/rmbench/source_data_command.txt。
 3. 每个 LeRobot repo 的 episode 数、state/action 维度和 key-state one-hot 校验通过。
-4. 转换命令、commit、repo_id 和校验结果记录在 `experiments/pi0_key_state_baseline/README.md` 中。
+4. repo_id、LeRobot repo 路径和校验结果记录在 `experiments/pi0_key_state_baseline/README.md` 中；转换命令和 commit 以 meta/rmbench/convert_command.txt 为准。
 ```
 
 提交要求：
 
 ```text
 不提交 LeRobot 数据集。
-如果正式转换预计一两个小时内完成，可以完成后一次性更新并提交 `experiments/pi0_key_state_baseline/README.md`，写清楚每个任务的 repo_id、转换命令、commit、LeRobot repo 路径和校验结果。
-如果正式转换预计运行很久，应在确认启动后先更新并提交 README，记录转换命令、commit、目标 repo_id 和运行状态；完成后再按验收标准自查并补充校验结果。
+如果正式转换预计一两个小时内完成，可以完成后一次性更新并提交 `experiments/pi0_key_state_baseline/README.md`，写清楚每个任务的 repo_id、LeRobot repo 路径和校验结果。
+如果正式转换预计运行很久，应在确认启动后先更新并提交 README，记录目标 repo_id、目标路径和运行状态；完成后再按验收标准自查并补充校验结果。
 ```
 
 ### 6. pi05 Key-State 训练入口、Norm Stats 与训练 Smoke
@@ -1136,7 +1138,7 @@ job_type: train
 
 ```text
 不提交 checkpoint 或 wandb 本地目录。
-正式训练启动后，更新并提交 `experiments/pi0_key_state_baseline/README.md`，写清楚每个任务的正式 norm stats 命令、训练命令、commit、checkpoint path、wandb id 或运行状态。
+正式训练启动后，更新并提交 `experiments/pi0_key_state_baseline/README.md`，写清楚每个任务的 checkpoint path、wandb id 或运行状态。
 正式训练完成后必须先按验收标准自查，再次更新并提交 README，补充完成状态、最终 checkpoint、wandb id 和必要观察。
 ```
 
@@ -1163,6 +1165,6 @@ eval_result/pi0_key_state_baseline/<run_id>/
 
 ```text
 不提交 eval_result 大文件或视频。
-正式评测启动后，更新并提交 `experiments/pi0_key_state_baseline/README.md`，写清楚 eval 命令、commit、checkpoint、eval result 目标路径和运行状态。
+正式评测启动后，更新并提交 `experiments/pi0_key_state_baseline/README.md`，写清楚 checkpoint、eval result 目标路径和运行状态。
 正式评测完成后必须先按验收标准自查，再次更新并提交 README，补充 SR、视频/结果路径、wandb id 和结论摘要。
 ```
