@@ -6,11 +6,11 @@ Batch ID: `put_back_block_key_state_ablation`
 
 ## 结论
 
-1. key-state memory 明显提升 `put_back_block`：pi0 LoRA baseline 是 4/50 = 0.08；key-state default LoRA 是 27/50 = 0.54，另一次 100-rollout 复测是 55/100 = 0.55。
+1. key-state memory 明显提升 `put_back_block`：pi0 LoRA baseline 正式 100-rollout 结果是 7/100 = 0.07，早期 50-rollout 结果是 4/50 = 0.08；key-state default LoRA 是 27/50 = 0.54，另一次 100-rollout 复测是 55/100 = 0.55。
 2. 本批实验只验证 Scheme B，即 per-frame/per-step key-state target；没有实现或评测 Scheme A 的 chunk-level repeated key-state target。
 3. 在 Scheme B 下，`default` 数据处理最好。`mat_first`、`mat_hash_p50`、`wmat_margin10/20`、`phase_lag10/20`、`phase_jitter5` 都没有超过 default。
 4. 当前最合理的解释是：仿真数据干净、数据量小，额外的鲁棒性设计反而引入 label noise、监督稀释或状态和动作不一致。
-5. default 仍只有约 55% 成功率；失败主要集中在按钮阶段的判定或执行。为判断 LoRA 容量是否是瓶颈，已补充 default key-state full finetune 训练，eval 正在运行。
+5. default full finetune 达到 68/100 = 0.68，比 default LoRA 的 55/100 = 0.55 更高，但仍低于论文报告的 Mem-0 90%，按钮阶段失败仍需要继续排查。
 
 ## 实验问题
 
@@ -151,10 +151,10 @@ default 另有一次 100-rollout 复测：
 
 动机：default LoRA 约 55% 成功率，失败主要集中在按钮阶段。为判断瓶颈是否来自 LoRA 容量或训练方式，补充了同一份 default key-state 数据上的 full finetune。
 
-训练状态：
+训练和评测状态：
 
 ```text
-status: trained, eval running
+status: trained, eval complete
 train commit: de1de697d1ab80478afb3852cc9d7d64102aa112
 wandb project: RMBench
 wandb id: u3csuoca
@@ -168,6 +168,8 @@ checkpoint_id: 30000
 checkpoint_dir: policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_full_b32/pi0_put_back_block_key_state_default_full_b32/30000
 eval_result_dir: eval_result/put_back_block_key_state_ablation/default_full_b32_raw_100_video5_20260614_170220
 eval_queue_log: eval_result/put_back_block_key_state_ablation/_eval_default_full_b32_raw_100_video5_20260614_170220.log
+eval_success: 68/100
+eval_success_rate: 0.68
 ```
 
 训练命令来自本地 wandb metadata：
@@ -180,7 +182,19 @@ cd policy/pi05
   --checkpoint-base-dir=checkpoints
 ```
 
-该 follow-up 属于同一 batch，但不计入 8 个数据处理消融 variant。eval 完成后，将在这里补充 LoRA default 和 full finetune default 的对照表。
+该 follow-up 属于同一 batch，但不计入 8 个数据处理消融 variant。
+
+对照结果：
+
+| Method | Setting | Success | Success rate | Source |
+| --- | --- | ---: | ---: | --- |
+| pi0 LoRA baseline | 原始 observation，无 key-state | 7/100 | 0.07 | `eval_result/pi0_lora_baseline/put_back_block_raw_100_video5_20260614_pi0_baseline_100` |
+| Paper Pi0.5 | RMBench Table 1 | - | 0.11 | `PROGRESS.md` 论文基准表 |
+| Paper Mem-0 | RMBench Table 1 | - | 0.90 | `PROGRESS.md` 论文基准表 |
+| key-state default LoRA | Scheme B, raw memory update | 55/100 | 0.55 | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_raw_100rollout_video5/2026-06-10 22:41:07` |
+| key-state default full finetune | Scheme B, full finetune, bs=32 | 68/100 | 0.68 | `eval_result/put_back_block_key_state_ablation/default_full_b32_raw_100_video5_20260614_170220` |
+
+相对 pi0 LoRA baseline，key-state default LoRA 提升 48 pp，full finetune 提升 61 pp；相对论文 Pi0.5 也明显更高。full finetune 相比 LoRA default 提升 13 pp，说明容量或训练方式确实是瓶颈之一；但 0.68 仍低于论文报告的 Mem-0 0.90，按钮阶段失败仍需要继续排查。
 
 ## 产物
 
