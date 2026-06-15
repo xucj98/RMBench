@@ -1,14 +1,16 @@
-"""Convert RMBench put_back_block data with key-state labels to LeRobot."""
+"""Convert RMBench state-augmented demos to LeRobot datasets."""
 
 from __future__ import annotations
 
-import dataclasses
-import hashlib
+import argparse
+import copy
 import json
+import os
 from pathlib import Path
-import random
+import shlex
 import shutil
-from typing import Literal
+import subprocess
+from typing import Any
 
 import cv2
 import h5py
@@ -16,44 +18,127 @@ from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import numpy as np
 import tqdm
-import tyro
+import yaml
 
 
-MAT_NAMES = ("left", "right", "front", "back")
 CAMERA_MAP = {
     "cam_high": "head_camera",
     "cam_left_wrist": "left_camera",
     "cam_right_wrist": "right_camera",
 }
+ROBOT_DIM_NAMES = [
+    "left_waist",
+    "left_shoulder",
+    "left_elbow",
+    "left_forearm_roll",
+    "left_wrist_angle",
+    "left_wrist_rotate",
+    "left_gripper",
+    "right_waist",
+    "right_shoulder",
+    "right_elbow",
+    "right_forearm_roll",
+    "right_wrist_angle",
+    "right_wrist_rotate",
+    "right_gripper",
+]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
-@dataclasses.dataclass(frozen=True)
-class DatasetConfig:
-    use_videos: bool = True
-    tolerance_s: float = 0.0001
-    image_writer_processes: int = 10
-    image_writer_threads: int = 5
-    video_backend: str | None = None
+def _load_yaml(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    return data or {}
 
 
-@dataclasses.dataclass(frozen=True)
-class ConvertConfig:
-    source_dir: Path
-    repo_id: str
-    episodes: int = 50
-    instruction_type: Literal["seen", "unseen"] = "seen"
-    mode: Literal["video", "image"] = "image"
-    key_output_mode: Literal["per_step"] = "per_step"
-    phase_input_policy: Literal["gt", "lag_after_boundary"] = "gt"
-    mat_input_policy: Literal["unknown_until_wmat_end", "unknown_first_frame_only", "early_hash_mix"] = (
-        "unknown_until_wmat_end"
-    )
-    wmat_margin_frames: int = 0
-    mat_unknown_prob: float = 0.5
-    phase_boundary_jitter_frames: int = 0
-    phase_boundary_jitter_seed: int = 0
-    lag_window_frames: int = 20
-    dataset_config: DatasetConfig = dataclasses.field(default_factory=DatasetConfig)
+def _load_json(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_yaml(path: Path, value: Any) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(value, f, allow_unicode=True, sort_keys=False)
+
+
+def _parse_override_tokens(tokens: list[str]) -> dict[str, Any]:
+    overrides = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if "=" in token:
+            key, raw_value = token.split("=", 1)
+            index += 1
+        else:
+            key = token.lstrip("-")
+            if index + 1 >= len(tokens):
+                raise ValueError(f"Missing value for override: {token}")
+            raw_value = tokens[index + 1]
+            index += 2
+        key = key.strip().lstrip("-")
+        if not key:
+            raise ValueError(f"Invalid override key in token: {token}")
+        overrides[key] = yaml.safe_load(raw_value)
+    return overrides
+
+
+def _apply_override(config: dict[str, Any], key: str, value: Any) -> None:
+    cursor = config
+    parts = key.split(".")
+    for part in parts[:-1]:
+        if part not in cursor or not isinstance(cursor[part], dict):
+            cursor[part] = {}
+        cursor = cursor[part]
+    cursor[parts[-1]] = value
+
+
+def _apply_overrides(config: dict[str, Any], overrides: dict[str, Any]) -> None:
+    for key, value in overrides.items():
+        _apply_override(config, key, value)
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def _git_status() -> str:
+    try:
+        status = subprocess.check_output(
+            ["git", "status", "--short"],
+            cwd=PROJECT_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+    return "clean" if not status else status
+
+
+def _runtime_env() -> dict[str, str]:
+    keys = ["CUDA_VISIBLE_DEVICES", "SAPIEN_RENDER_DEVICE", "PYTHONPATH"]
+    return {key: os.environ[key] for key in keys if key in os.environ}
+
+
+def _write_command(path: Path, argv: list[str]) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        f.write(f"commit: {_git_commit()}\n")
+        f.write(f"git_status: {_git_status()}\n")
+        f.write(f"cwd: {Path.cwd()}\n")
+        env = _runtime_env()
+        if env:
+            f.write("env:\n")
+            for key, value in env.items():
+                f.write(f"  {key}={value}\n")
+        f.write("command:\n")
+        f.write(f"  {' '.join(shlex.quote(item) for item in argv)}\n")
 
 
 def _one_hot(index: int, size: int) -> np.ndarray:
@@ -70,217 +155,284 @@ def _decode_image(encoded: bytes | np.bytes_) -> np.ndarray:
     return cv2.resize(image, (640, 480))
 
 
-def _frame_hash_prob(episode_idx: int, frame_idx: int, seed: int) -> float:
-    key = f"{seed}:{episode_idx}:{frame_idx}".encode()
-    digest = hashlib.sha256(key).digest()
-    return int.from_bytes(digest[:8], "big") / float(2**64)
-
-
 def _episode_key(episode_idx: int) -> str:
     return f"episode_{episode_idx}"
 
 
-def _load_json(path: Path) -> dict:
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+def _as_abs_path(path: str | Path) -> Path:
+    path = Path(path)
+    if path.is_absolute():
+        return path
+    return PROJECT_ROOT / path
 
 
-def _segment_lengths(language_annotation: dict, episode_idx: int) -> list[int]:
-    values = language_annotation[_episode_key(episode_idx)]
-    lengths = [int(item[1]) for item in values]
-    if len(lengths) != 10:
-        raise ValueError(f"Expected 10 language segments for episode {episode_idx}, got {len(lengths)}")
-    return lengths
+def _get_nested(value: Any, path: list[str]) -> Any:
+    cursor = value
+    for part in path:
+        if not isinstance(cursor, dict) or part not in cursor:
+            raise KeyError(".".join(path))
+        cursor = cursor[part]
+    return cursor
 
 
-def _phase_boundaries(lengths: list[int], episode_idx: int, cfg: ConvertConfig, action_frames: int) -> tuple[int, int]:
-    b01 = sum(lengths[:3])
-    b12 = sum(lengths[:7])
-
-    jitter = int(cfg.phase_boundary_jitter_frames)
-    if jitter > 0:
-        rng = random.Random(cfg.phase_boundary_jitter_seed + episode_idx * 9973)
-        b01 += rng.randint(-jitter, jitter)
-        b12 += rng.randint(-jitter, jitter)
-
-    b01 = int(np.clip(b01, 1, action_frames - 1))
-    b12 = int(np.clip(b12, b01 + 1, action_frames))
-    return b01, b12
+def _stage_map(info: dict[str, Any]) -> dict[str, dict[str, int]]:
+    stages = {}
+    for item in info.get("micro_stages", []):
+        name = str(item["name"])
+        stages[name] = {
+            "start_frame": int(item["start_frame"]),
+            "end_frame": int(item["end_frame"]),
+        }
+    return stages
 
 
-def _phase_at(frame_idx: int, b01: int, b12: int) -> int:
-    if frame_idx < b01:
+def _resolve_ref(value: Any, info: dict[str, Any], total_frames: int) -> Any:
+    if not isinstance(value, str):
+        return value
+    if value == "episode_start":
         return 0
-    if frame_idx < b12:
-        return 1
-    return 2
+    if value == "episode_end":
+        return total_frames
+    if value.startswith("task_facts."):
+        return _get_nested(info["task_facts"], value.split(".")[1:])
+    if value.startswith("micro_stages."):
+        parts = value.split(".")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid micro stage reference: {value}")
+        stage_name, field = parts[1], parts[2]
+        stages = _stage_map(info)
+        if stage_name not in stages:
+            raise KeyError(value)
+        if field not in stages[stage_name]:
+            raise KeyError(value)
+        return stages[stage_name][field]
+    return value
 
 
-def _phase_input(frame_idx: int, b01: int, b12: int, cfg: ConvertConfig) -> int:
-    phase = _phase_at(frame_idx, b01, b12)
-    if cfg.phase_input_policy != "lag_after_boundary":
-        return phase
-
-    lag = max(0, int(cfg.lag_window_frames))
-    if b01 <= frame_idx < b01 + lag:
-        return 0
-    if b12 <= frame_idx < b12 + lag:
-        return 1
-    return phase
+def _resolve_window(window: list[Any], info: dict[str, Any], total_frames: int) -> tuple[int, int]:
+    if len(window) != 2:
+        raise ValueError(f"Window must contain [start, end], got: {window}")
+    start = int(_resolve_ref(window[0], info, total_frames))
+    end = int(_resolve_ref(window[1], info, total_frames))
+    if not (0 <= start < end <= total_frames):
+        raise ValueError(f"Invalid window [{start}, {end}) for total_frames={total_frames}")
+    return start, end
 
 
-def _mat_input(frame_idx: int, wmat_end: int, key_mat_id: int, episode_idx: int, cfg: ConvertConfig) -> int:
-    if cfg.mat_input_policy == "unknown_first_frame_only":
-        return 0 if frame_idx == 0 else key_mat_id
-
-    if frame_idx >= wmat_end:
-        return key_mat_id
-
-    if cfg.mat_input_policy == "unknown_until_wmat_end":
-        return 0
-
-    if cfg.mat_input_policy == "early_hash_mix":
-        p = _frame_hash_prob(episode_idx, frame_idx, cfg.phase_boundary_jitter_seed)
-        return 0 if p < cfg.mat_unknown_prob else key_mat_id
-
-    raise ValueError(f"Unknown mat_input_policy: {cfg.mat_input_policy}")
+def _labels(config: dict[str, Any]) -> list[str]:
+    labels = config.get("labels")
+    if not labels:
+        raise ValueError(f"Missing labels in config block: {config}")
+    return [str(item) for item in labels]
 
 
-def _build_state_action(
-    robot_state: np.ndarray,
-    robot_action: np.ndarray,
-    phase_input: int,
-    mat_input: int,
-    phase_target: int,
-    mat_target: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    state = np.zeros(32, dtype=np.float32)
-    action = np.zeros(32, dtype=np.float32)
-    state[:14] = robot_state.astype(np.float32)
-    action[:14] = robot_action.astype(np.float32)
-    state[14:17] = _one_hot(phase_input, 3)
-    state[17:22] = _one_hot(mat_input, 5)
-    action[14:17] = _one_hot(phase_target, 3)
-    action[17:22] = _one_hot(mat_target, 5)
-    return state, action
+def _dim(config: dict[str, Any]) -> tuple[int, int]:
+    dim = config.get("dim")
+    if not isinstance(dim, list) or len(dim) != 2:
+        raise ValueError(f"dim must be [start, end], got: {dim}")
+    return int(dim[0]), int(dim[1])
 
 
-def _create_empty_dataset(cfg: ConvertConfig) -> LeRobotDataset:
-    robot_dims = [
-        "left_waist",
-        "left_shoulder",
-        "left_elbow",
-        "left_forearm_roll",
-        "left_wrist_angle",
-        "left_wrist_rotate",
-        "left_gripper",
-        "right_waist",
-        "right_shoulder",
-        "right_elbow",
-        "right_forearm_roll",
-        "right_wrist_angle",
-        "right_wrist_rotate",
-        "right_gripper",
-    ]
-    key_dims = [
-        "phase_move_to_center",
-        "phase_press_button",
-        "phase_move_back",
-        "mat_unknown",
-        "mat_left",
-        "mat_right",
-        "mat_front",
-        "mat_back",
-    ]
-    names = robot_dims + key_dims + [f"pad_{i}" for i in range(10)]
+def _label_index(labels: list[str], value: Any) -> int:
+    value = str(value)
+    if value not in labels:
+        raise ValueError(f"Value {value!r} not found in labels {labels}")
+    return labels.index(value)
+
+
+def _phase_ranges(
+    phase_config: dict[str, Any],
+    info: dict[str, Any],
+    total_frames: int,
+) -> list[tuple[int, int, int, str]]:
+    labels = _labels(phase_config)
+    ranges = []
+    for item in phase_config.get("ranges", []):
+        label = str(item["label"])
+        if label not in labels:
+            raise ValueError(f"Phase range label {label!r} not in labels {labels}")
+        try:
+            start, end = _resolve_window(item["window"], info, total_frames)
+        except KeyError:
+            if item.get("optional", False):
+                continue
+            raise
+        ranges.append((_label_index(labels, label), start, end, label))
+    ranges.sort(key=lambda item: item[1])
+    if not ranges:
+        raise ValueError("No phase ranges resolved")
+    return ranges
+
+
+def _phase_at(frame_idx: int, ranges: list[tuple[int, int, int, str]]) -> int:
+    for index, start, end, _label in ranges:
+        if start <= frame_idx < end:
+            return index
+    if frame_idx < ranges[0][1]:
+        return ranges[0][0]
+    return ranges[-1][0]
+
+
+def _attribute_indices(
+    attr_config: dict[str, Any],
+    info: dict[str, Any],
+    total_frames: int,
+    frame_idx: int,
+) -> tuple[int, int]:
+    labels = _labels(attr_config)
+    transitions = attr_config.get("transitions", [])
+    if not transitions:
+        raise ValueError(f"Attribute {attr_config.get('name')} has no transitions")
+
+    state_value = _resolve_ref(transitions[0]["from_value"], info, total_frames)
+    target_value = state_value
+    for transition in transitions:
+        from_value = _resolve_ref(transition["from_value"], info, total_frames)
+        to_value = _resolve_ref(transition["to_value"], info, total_frames)
+        start, end = _resolve_window(transition["update_window"], info, total_frames)
+        if frame_idx < start:
+            break
+        if start <= frame_idx < end:
+            state_value = from_value
+            target_value = to_value
+            break
+        state_value = to_value
+        target_value = to_value
+
+    return _label_index(labels, state_value), _label_index(labels, target_value)
+
+
+def _feature_names(config: dict[str, Any]) -> list[str]:
+    state_dim = int(config["state_layout"].get("state_dim", 32))
+    robot_dim = int(config["state_layout"].get("robot_dim", 14))
+    names = [f"dim_{idx}" for idx in range(state_dim)]
+    for idx in range(min(robot_dim, len(ROBOT_DIM_NAMES))):
+        names[idx] = ROBOT_DIM_NAMES[idx]
+
+    phase_config = config["phase"]
+    start, end = _dim(phase_config)
+    labels = _labels(phase_config)
+    if end - start != len(labels):
+        raise ValueError("Phase dim size does not match labels")
+    for offset, label in enumerate(labels):
+        names[start + offset] = f"phase_{label}"
+
+    for attr_config in config.get("attributes", []):
+        attr_start, attr_end = _dim(attr_config)
+        attr_labels = _labels(attr_config)
+        if attr_end - attr_start != len(attr_labels):
+            raise ValueError(f"Attribute {attr_config.get('name')} dim size does not match labels")
+        for offset, label in enumerate(attr_labels):
+            names[attr_start + offset] = f"{attr_config['name']}_{label}"
+
+    for idx, name in enumerate(names):
+        if name == f"dim_{idx}":
+            names[idx] = f"pad_{idx}"
+    return names
+
+
+def _validate_layout(config: dict[str, Any]) -> None:
+    state_dim = int(config["state_layout"].get("state_dim", 32))
+    occupied = np.zeros(state_dim, dtype=np.int32)
+    robot_dim = int(config["state_layout"].get("robot_dim", 14))
+    occupied[:robot_dim] = 1
+    blocks = [config["phase"], *config.get("attributes", [])]
+    for block in blocks:
+        start, end = _dim(block)
+        if start < 0 or end > state_dim or start >= end:
+            raise ValueError(f"Invalid dim {block.get('name', 'phase')}: {[start, end]}")
+        if occupied[start:end].any():
+            raise ValueError(f"Overlapping dim {block.get('name', 'phase')}: {[start, end]}")
+        occupied[start:end] = 1
+
+
+def _create_empty_dataset(config: dict[str, Any]) -> LeRobotDataset:
+    _validate_layout(config)
+    dataset_config = config.get("dataset_config", {})
+    dataset = config["dataset"]
+    state_dim = int(config["state_layout"].get("state_dim", 32))
+    mode = dataset.get("mode", "image")
 
     features = {
         "observation.state": {
             "dtype": "float32",
-            "shape": (32,),
-            "names": [names],
+            "shape": (state_dim,),
+            "names": [_feature_names(config)],
         },
         "action": {
             "dtype": "float32",
-            "shape": (32,),
-            "names": [names],
+            "shape": (state_dim,),
+            "names": [_feature_names(config)],
         },
     }
     for cam in CAMERA_MAP:
         features[f"observation.images.{cam}"] = {
-            "dtype": cfg.mode,
+            "dtype": mode,
             "shape": (3, 480, 640),
             "names": ["channels", "height", "width"],
         }
 
-    dataset_path = Path(HF_LEROBOT_HOME) / cfg.repo_id
+    dataset_path = Path(HF_LEROBOT_HOME) / dataset["repo_id"]
     if dataset_path.exists():
         shutil.rmtree(dataset_path)
 
     return LeRobotDataset.create(
-        repo_id=cfg.repo_id,
-        fps=50,
-        robot_type="aloha",
+        repo_id=dataset["repo_id"],
+        fps=int(dataset.get("fps", 50)),
+        robot_type=dataset.get("robot_type", "aloha"),
         features=features,
-        use_videos=cfg.dataset_config.use_videos,
-        tolerance_s=cfg.dataset_config.tolerance_s,
-        image_writer_processes=cfg.dataset_config.image_writer_processes,
-        image_writer_threads=cfg.dataset_config.image_writer_threads,
-        video_backend=cfg.dataset_config.video_backend,
+        use_videos=bool(dataset_config.get("use_videos", True)),
+        tolerance_s=float(dataset_config.get("tolerance_s", 0.0001)),
+        image_writer_processes=int(dataset_config.get("image_writer_processes", 10)),
+        image_writer_threads=int(dataset_config.get("image_writer_threads", 5)),
+        video_backend=dataset_config.get("video_backend"),
     )
 
 
-def _instruction_for_episode(cfg: ConvertConfig, episode_idx: int) -> str:
-    path = cfg.source_dir / "instructions" / f"episode{episode_idx}.json"
-    instructions = _load_json(path)[cfg.instruction_type]
+def _instruction_for_episode(config: dict[str, Any], episode_idx: int) -> str:
+    source_dir = _as_abs_path(config["dataset"]["source_dir"])
+    instruction_type = config["dataset"].get("instruction_type", "seen")
+    path = source_dir / "instructions" / f"episode{episode_idx}.json"
+    instructions = _load_json(path)[instruction_type]
     if not instructions:
-        raise ValueError(f"No {cfg.instruction_type} instructions in {path}")
+        raise ValueError(f"No {instruction_type} instructions in {path}")
     return str(instructions[0])
 
 
 def _populate_episode(
     dataset: LeRobotDataset,
-    cfg: ConvertConfig,
+    config: dict[str, Any],
     episode_idx: int,
-    scene_info: dict,
-    language_annotation: dict,
-) -> dict:
-    episode_path = cfg.source_dir / "data" / f"episode{episode_idx}.hdf5"
+    scene_info: dict[str, Any],
+) -> dict[str, Any]:
+    source_dir = _as_abs_path(config["dataset"]["source_dir"])
+    episode_path = source_dir / "data" / f"episode{episode_idx}.hdf5"
     info = scene_info[_episode_key(episode_idx)]["info"]
-    key_mat_id = int(info["origin_mat_id"]) + 1
-    if not 1 <= key_mat_id <= 4:
-        raise ValueError(f"Invalid key_mat_id {key_mat_id} for episode {episode_idx}")
-
-    lengths = _segment_lengths(language_annotation, episode_idx)
-    instruction = _instruction_for_episode(cfg, episode_idx)
+    instruction = _instruction_for_episode(config, episode_idx)
 
     with h5py.File(episode_path, "r") as ep:
         vector = ep["/joint_action/vector"][:].astype(np.float32)
         total_frames = int(vector.shape[0])
         action_frames = total_frames - 1
-        b01, b12 = _phase_boundaries(lengths, episode_idx, cfg, action_frames)
-        wmat_end = int(lengths[0] + cfg.wmat_margin_frames)
-        wmat_end = int(np.clip(wmat_end, 1, action_frames))
-
-        segment_total = sum(lengths)
-        if segment_total not in (total_frames, action_frames):
-            print(
-                f"[WARN] episode={episode_idx} hdf5_frames={total_frames} "
-                f"action_frames={action_frames} segment_total={segment_total}"
-            )
+        phase_ranges = _phase_ranges(config["phase"], info, total_frames)
 
         for frame_idx in range(action_frames):
-            phase_in = _phase_input(frame_idx, b01, b12, cfg)
-            phase_target = _phase_at(frame_idx + 1, b01, b12)
-            mat_in = _mat_input(frame_idx, wmat_end, key_mat_id, episode_idx, cfg)
-            state, action = _build_state_action(
-                vector[frame_idx],
-                vector[frame_idx + 1],
-                phase_in,
-                mat_in,
-                phase_target,
-                key_mat_id,
-            )
+            state = np.zeros(int(config["state_layout"].get("state_dim", 32)), dtype=np.float32)
+            action = np.zeros_like(state)
+            robot_dim = int(config["state_layout"].get("robot_dim", 14))
+            state[:robot_dim] = vector[frame_idx, :robot_dim].astype(np.float32)
+            action[:robot_dim] = vector[frame_idx + 1, :robot_dim].astype(np.float32)
+
+            phase_start, phase_end = _dim(config["phase"])
+            state[phase_start:phase_end] = _one_hot(_phase_at(frame_idx, phase_ranges), phase_end - phase_start)
+            action[phase_start:phase_end] = _one_hot(_phase_at(frame_idx + 1, phase_ranges), phase_end - phase_start)
+
+            for attr_config in config.get("attributes", []):
+                attr_start, attr_end = _dim(attr_config)
+                attr_state_idx, attr_target_idx = _attribute_indices(attr_config, info, total_frames, frame_idx)
+                state[attr_start:attr_end] = _one_hot(attr_state_idx, attr_end - attr_start)
+                action[attr_start:attr_end] = _one_hot(attr_target_idx, attr_end - attr_start)
+
             frame = {
                 "observation.state": state,
                 "action": action,
@@ -295,45 +447,91 @@ def _populate_episode(
         "episode_idx": episode_idx,
         "frames": action_frames,
         "source_frames": total_frames,
-        "segment_total": segment_total,
-        "b01": b01,
-        "b12": b12,
-        "wmat_end": wmat_end,
-        "mat_id": key_mat_id,
-        "mat_name": MAT_NAMES[key_mat_id - 1],
+        "phase_ranges": [
+            {"label": label, "start_frame": start, "end_frame": end}
+            for _idx, start, end, label in phase_ranges
+        ],
     }
 
 
-def convert(cfg: ConvertConfig) -> None:
-    if cfg.key_output_mode != "per_step":
-        raise ValueError("Only key_output_mode='per_step' is supported by this converter")
+def _copy_source_metadata(config: dict[str, Any], rmbench_meta_dir: Path) -> None:
+    source_dir = _as_abs_path(config["dataset"]["source_dir"])
+    source_meta = source_dir / "metadata"
+    required = {
+        "config.yaml": "source_data_config.yaml",
+        "command.txt": "source_data_command.txt",
+    }
+    for source_name, target_name in required.items():
+        source_path = source_meta / source_name
+        if not source_path.exists():
+            raise FileNotFoundError(f"Missing source metadata file: {source_path}")
+        shutil.copy2(source_path, rmbench_meta_dir / target_name)
 
-    scene_info = _load_json(cfg.source_dir / "scene_info.json")
-    language_annotation = _load_json(cfg.source_dir / "language_annotation.json")
-    dataset = _create_empty_dataset(cfg)
+
+def _validate_source(config: dict[str, Any]) -> dict[str, Any]:
+    source_dir = _as_abs_path(config["dataset"]["source_dir"])
+    if not source_dir.exists():
+        raise FileNotFoundError(f"Source directory not found: {source_dir}")
+    scene_info = _load_json(source_dir / "scene_info.json")
+    requested_episodes = int(config["dataset"].get("episodes", 50))
+    data_files = sorted((source_dir / "data").glob("episode*.hdf5"))
+    if len(data_files) < requested_episodes:
+        raise ValueError(
+            f"Source has {len(data_files)} hdf5 episodes, but config requests {requested_episodes}: {source_dir}"
+        )
+    for episode_idx in range(requested_episodes):
+        instruction_path = source_dir / "instructions" / f"episode{episode_idx}.json"
+        if not instruction_path.exists():
+            raise FileNotFoundError(f"Missing instruction file: {instruction_path}")
+    return scene_info
+
+
+def convert(config: dict[str, Any], argv: list[str]) -> None:
+    config = copy.deepcopy(config)
+    config.setdefault("dataset", {})
+    config["dataset"].setdefault("instruction_type", "seen")
+    config["dataset"].setdefault("mode", "image")
+    config["dataset"].setdefault("fps", 50)
+    config["dataset"].setdefault("robot_type", "aloha")
+    config.setdefault("dataset_config", {})
+
+    scene_info = _validate_source(config)
+    dataset = _create_empty_dataset(config)
 
     summaries = []
-    for episode_idx in tqdm.tqdm(range(cfg.episodes), desc=f"Converting {cfg.repo_id}"):
-        summaries.append(_populate_episode(dataset, cfg, episode_idx, scene_info, language_annotation))
+    for episode_idx in tqdm.tqdm(range(int(config["dataset"]["episodes"])), desc=f"Converting {config['dataset']['repo_id']}"):
+        summaries.append(_populate_episode(dataset, config, episode_idx, scene_info))
 
-    dataset_path = Path(HF_LEROBOT_HOME) / cfg.repo_id
-    meta_path = dataset_path / "meta" / "key_state_config.json"
-    meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(
-        json.dumps(
-            {
-                "config": dataclasses.asdict(cfg),
-                "episodes": summaries,
-            },
-            indent=2,
-            ensure_ascii=False,
-            default=str,
-        ),
-        encoding="utf-8",
-    )
+    dataset_path = Path(HF_LEROBOT_HOME) / config["dataset"]["repo_id"]
+    rmbench_meta_dir = dataset_path / "meta" / "rmbench"
+    rmbench_meta_dir.mkdir(parents=True, exist_ok=True)
+    _write_yaml(rmbench_meta_dir / "key_state_config.yaml", {
+        "config": config,
+        "episodes": summaries,
+    })
+    _write_command(rmbench_meta_dir / "convert_command.txt", argv)
+    _copy_source_metadata(config, rmbench_meta_dir)
+
     print(f"Wrote LeRobot dataset to {dataset_path}")
-    print(f"Wrote key-state metadata to {meta_path}")
+    print(f"Wrote RMBench metadata to {rmbench_meta_dir}")
+
+
+def parse_args(argv: list[str] | None = None) -> tuple[dict[str, Any], list[str]]:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--overrides", nargs="*", default=[])
+    args = parser.parse_args(argv)
+
+    config = _load_yaml(Path(args.config))
+    overrides = _parse_override_tokens(args.overrides)
+    _apply_overrides(config, overrides)
+    config["_runtime"] = {
+        "config_path": args.config,
+        "overrides": overrides,
+    }
+    return config, [os.path.basename(__file__), *(argv if argv is not None else os.sys.argv[1:])]
 
 
 if __name__ == "__main__":
-    convert(tyro.cli(ConvertConfig))
+    parsed_config, parsed_argv = parse_args()
+    convert(parsed_config, parsed_argv)

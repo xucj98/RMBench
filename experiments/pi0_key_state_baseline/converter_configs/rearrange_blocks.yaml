@@ -1,0 +1,32 @@
+dataset:
+  task: rearrange_blocks
+  source_dir: data/rearrange_blocks/demo_clean_state
+  repo_id: rearrange_blocks_demo_clean_state_key_state
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+phase:
+  dim: [14, 17]
+  labels:
+    - move_middle_block_to_empty_mat
+    - press_button_after_first_move
+    - move_original_mat_block_to_middle
+  ranges:
+    - label: move_middle_block_to_empty_mat
+      window: [episode_start, micro_stages.block1_place.end_frame]
+    - label: press_button_after_first_move
+      window: [micro_stages.block1_place.end_frame, micro_stages.press_return.end_frame]
+    - label: move_original_mat_block_to_middle
+      window: [micro_stages.press_return.end_frame, episode_end]
+
+attributes:
+  - name: empty_mat_side
+    dim: [17, 20]
+    labels: [unknown, left, right]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.empty_mat_side
+        update_window: [episode_start, micro_stages.block1_place.start_frame]
