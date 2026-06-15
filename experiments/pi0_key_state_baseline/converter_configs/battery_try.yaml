@@ -17,13 +17,13 @@ phase:
     - try_01
   ranges:
     - label: place_initial_00
-      window: [episode_start, micro_stages.place_initial_00.end_frame]
+      window: [episode_start, micro_stages.place_initial_00_battery2_return.end_frame]
     - label: try_10
-      window: [micro_stages.place_initial_00.end_frame, micro_stages.try_10.end_frame]
+      window: [micro_stages.place_initial_00_battery2_return.end_frame, micro_stages.try_10_battery1_return.end_frame]
       optional: true
     - label: try_11
-      window: [micro_stages.try_10.end_frame, micro_stages.try_11.end_frame]
+      window: [micro_stages.try_10_battery1_return.end_frame, micro_stages.try_11_battery2_return.end_frame]
       optional: true
     - label: try_01
-      window: [micro_stages.try_11.end_frame, micro_stages.try_01.end_frame]
+      window: [micro_stages.try_11_battery2_return.end_frame, micro_stages.try_01_battery1_return.end_frame]
       optional: true

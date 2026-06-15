@@ -1,5 +1,6 @@
 assets/
 data/
+data_smoke/
 logs/
 eval_result
 task_videos

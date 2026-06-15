@@ -103,39 +103,82 @@ class battery_try(Base_Task):
         curr_combination = [battery1_state, battery2_state]
         return curr_combination
 
-    def place_for_battery1(self, arm, state):
-        curr_state = self.get_battery_state(self.battery1)
-        if (state == 0 and state != curr_state):
-            self.move(self.grasp_actor(self.battery1, arm_tag=arm, pre_grasp_dis=0.1, grasp_dis=0.03), language_annotation="Pick up the left battery and place it into the battery slot in the positive direction.")
-            self.move(self.move_by_displacement(arm_tag=arm, z=0.05), language_annotation="Pick up the left battery and place it into the battery slot in the positive direction.")
-            self.move(self.place_actor(self.battery1, arm_tag=arm, target_pose=self.target_pose1_p.tolist()+self.quat_of_target_pose_0.tolist(), functional_point_id=0, constrain="align"),
-                      language_annotation="Pick up the left battery and place it into the battery slot in the positive direction.")
-            self.check_correct_combination()
-            self.move(self.back_to_origin(arm_tag=arm), language_annotation="Pick up the left battery and place it into the battery slot in the positive direction.")
-        elif (state == 1 and state != curr_state):
-            self.move(self.grasp_actor(self.battery1, arm_tag=arm, pre_grasp_dis=0.1, grasp_dis=0.03), language_annotation="Pick up the left battery and place it into the battery slot in the negative direction.")
-            self.move(self.move_by_displacement(arm_tag=arm, z=0.05), language_annotation="Pick up the left battery and place it into the battery slot in the negative direction.")
-            self.move(self.place_actor(self.battery1, arm_tag=arm, target_pose=self.target_pose1_p.tolist()+self.quat_of_target_pose_1.tolist(), functional_point_id=0, constrain="align"),
-                      language_annotation="Pick up the left battery and place it into the battery slot in the negative direction.")
-            self.check_correct_combination()
-            self.move(self.back_to_origin(arm_tag=arm), language_annotation="Pick up the left battery and place it into the battery slot in the negative direction.")
+    def _move_stage(self, stage_name, *actions, language_annotation):
+        start = self._key_state_stage_start()
+        self.move(*actions, language_annotation=language_annotation)
+        self._record_key_state_micro_stage(stage_name, start)
 
-    def place_for_battery2(self, arm, state):
+    def place_for_battery1(self, arm, state, stage_prefix):
+        curr_state = self.get_battery_state(self.battery1)
+        if state == curr_state:
+            return False
+        target_quat = self.quat_of_target_pose_0 if state == 0 else self.quat_of_target_pose_1
+        direction = "positive" if state == 0 else "negative"
+        annotation = f"Pick up the left battery and place it into the battery slot in the {direction} direction."
+        self._move_stage(
+            f"{stage_prefix}_battery1_pick",
+            self.grasp_actor(self.battery1, arm_tag=arm, pre_grasp_dis=0.1, grasp_dis=0.03),
+            language_annotation=annotation,
+        )
+        self._move_stage(
+            f"{stage_prefix}_battery1_lift",
+            self.move_by_displacement(arm_tag=arm, z=0.05),
+            language_annotation=annotation,
+        )
+        self._move_stage(
+            f"{stage_prefix}_battery1_place",
+            self.place_actor(
+                self.battery1,
+                arm_tag=arm,
+                target_pose=self.target_pose1_p.tolist()+target_quat.tolist(),
+                functional_point_id=0,
+                constrain="align",
+            ),
+            language_annotation=annotation,
+        )
+        self.check_correct_combination()
+        self._move_stage(
+            f"{stage_prefix}_battery1_return",
+            self.back_to_origin(arm_tag=arm),
+            language_annotation=annotation,
+        )
+        return True
+
+    def place_for_battery2(self, arm, state, stage_prefix):
         curr_state = self.get_battery_state(self.battery2)
-        if (state == 0 and state != curr_state):
-            self.move(self.grasp_actor(self.battery2, arm_tag=arm, pre_grasp_dis=0.1, grasp_dis=0.03), language_annotation="Pick up the right battery and place it into the battery slot in the positive direction.")
-            self.move(self.move_by_displacement(arm_tag=arm, z=0.05), language_annotation="Pick up the right battery and place it into the battery slot in the positive direction.")
-            self.move(self.place_actor(self.battery2, arm_tag=arm, target_pose=self.target_pose2_p.tolist()+self.quat_of_target_pose_0.tolist(), functional_point_id=0, constrain="align"),
-                      language_annotation="Pick up the right battery and place it into the battery slot in the positive direction.")
-            self.check_correct_combination()
-            self.move(self.back_to_origin(arm_tag=arm), language_annotation="Pick up the right battery and place it into the battery slot in the positive direction.")
-        elif (state == 1 and state != curr_state):
-            self.move(self.grasp_actor(self.battery2, arm_tag=arm, pre_grasp_dis=0.1, grasp_dis=0.03), language_annotation="Pick up the right battery and place it into the battery slot in the negative direction.")
-            self.move(self.move_by_displacement(arm_tag=arm, z=0.05), language_annotation="Pick up the right battery and place it into the battery slot in the negative direction.")
-            self.move(self.place_actor(self.battery2, arm_tag=arm, target_pose=self.target_pose2_p.tolist()+self.quat_of_target_pose_1.tolist(), functional_point_id=0, constrain="align"),
-                      language_annotation="Pick up the right battery and place it into the battery slot in the negative direction.")
-            self.check_correct_combination()
-            self.move(self.back_to_origin(arm_tag=arm), language_annotation="Pick up the right battery and place it into the battery slot in the negative direction.")
+        if state == curr_state:
+            return False
+        target_quat = self.quat_of_target_pose_0 if state == 0 else self.quat_of_target_pose_1
+        direction = "positive" if state == 0 else "negative"
+        annotation = f"Pick up the right battery and place it into the battery slot in the {direction} direction."
+        self._move_stage(
+            f"{stage_prefix}_battery2_pick",
+            self.grasp_actor(self.battery2, arm_tag=arm, pre_grasp_dis=0.1, grasp_dis=0.03),
+            language_annotation=annotation,
+        )
+        self._move_stage(
+            f"{stage_prefix}_battery2_lift",
+            self.move_by_displacement(arm_tag=arm, z=0.05),
+            language_annotation=annotation,
+        )
+        self._move_stage(
+            f"{stage_prefix}_battery2_place",
+            self.place_actor(
+                self.battery2,
+                arm_tag=arm,
+                target_pose=self.target_pose2_p.tolist()+target_quat.tolist(),
+                functional_point_id=0,
+                constrain="align",
+            ),
+            language_annotation=annotation,
+        )
+        self.check_correct_combination()
+        self._move_stage(
+            f"{stage_prefix}_battery2_return",
+            self.back_to_origin(arm_tag=arm),
+            language_annotation=annotation,
+        )
+        return True
 
     def check_correct_combination(self):
         curr_combination = self.get_curr_combination()
@@ -147,27 +190,37 @@ class battery_try(Base_Task):
         dashboard_on_after_trial = None
         for idx, next_comb in enumerate(self.combination_lst):
             stage_name = "place_initial_00" if idx == 0 else f"try_{self._combination_name(next_comb)}"
-            start = self._key_state_stage_start()
             arm_tag = ArmTag("left" if self.battery1.get_pose().p[0] < 0 else "right")
             if idx == 0:
-                self.move(
+                self._move_stage(
+                    f"{stage_name}_dual_pick",
                     self.grasp_actor(self.battery1, arm_tag=arm_tag, pre_grasp_dis=0.1, grasp_dis=0.03),
                     self.grasp_actor(self.battery2, arm_tag=arm_tag.opposite, pre_grasp_dis=0.1, grasp_dis=0.03),
                     language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
-                self.move(
+                self._move_stage(
+                    f"{stage_name}_dual_lift",
                     self.move_by_displacement(arm_tag=arm_tag, z=0.1),
                     self.move_by_displacement(arm_tag=arm_tag.opposite, z=0.1),
                     language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
-                self.move(self.place_actor(self.battery1, arm_tag=arm_tag, target_pose=self.target_pose1_p.tolist()+self.quat_of_target_pose_0.tolist(), functional_point_id=0, constrain="align"),
-                          language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
-                self.move(self.back_to_origin(arm_tag=arm_tag), language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
-                self.move(self.place_actor(self.battery2, arm_tag=arm_tag.opposite, target_pose=self.target_pose2_p.tolist()+self.quat_of_target_pose_0.tolist(), functional_point_id=0, constrain="align"),
-                          language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
-                self.move(self.back_to_origin(arm_tag=arm_tag.opposite), language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
+                self._move_stage(
+                    f"{stage_name}_battery1_place",
+                    self.place_actor(self.battery1, arm_tag=arm_tag, target_pose=self.target_pose1_p.tolist()+self.quat_of_target_pose_0.tolist(), functional_point_id=0, constrain="align"),
+                    language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
+                self._move_stage(
+                    f"{stage_name}_battery1_return",
+                    self.back_to_origin(arm_tag=arm_tag),
+                    language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
+                self._move_stage(
+                    f"{stage_name}_battery2_place",
+                    self.place_actor(self.battery2, arm_tag=arm_tag.opposite, target_pose=self.target_pose2_p.tolist()+self.quat_of_target_pose_0.tolist(), functional_point_id=0, constrain="align"),
+                    language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
+                self._move_stage(
+                    f"{stage_name}_battery2_return",
+                    self.back_to_origin(arm_tag=arm_tag.opposite),
+                    language_annotation="Use dual arm to pick up the batteries and place them into the battery slots in the positive direction.")
             else:
-                self.place_for_battery1(arm_tag, next_comb[0])
-                self.place_for_battery2(arm_tag.opposite, next_comb[1])
-            self._record_key_state_micro_stage(stage_name, start)
+                self.place_for_battery1(arm_tag, next_comb[0], stage_name)
+                self.place_for_battery2(arm_tag.opposite, next_comb[1], stage_name)
             curr_state = self.get_curr_combination()
             actual_trial_sequence.append(self._combination_name(curr_state))
             if curr_state == self.correct_combination:
