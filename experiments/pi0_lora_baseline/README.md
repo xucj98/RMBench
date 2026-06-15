@@ -2,7 +2,7 @@
 
 Batch ID: `pi0_lora_baseline`
 
-本批实验记录 pi0 LoRA 在 RMBench 9 个任务上的 baseline。9 个任务的 LoRA checkpoint 已经训练完成；当前正在统一复跑 100-rollout eval，每个任务前 5 个 episode 录制视频。
+本批实验记录 pi0 LoRA 在 RMBench 9 个任务上的 baseline。9 个任务的 LoRA checkpoint 已经训练完成；100-rollout eval 已完成，每个任务前 5 个 episode 录制视频。
 
 ## 实验范围
 
@@ -76,7 +76,7 @@ model_name: <task_name>
 | `press_button` | `press_button_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/press_button/30000` | `qzefa4zv` |
 | `blocks_ranking_try` | `blocks_ranking_try_demo_clean` | `policy/pi05/checkpoints/pi0_lora_baseline/blocks_ranking_try/30000` | `hdc73kyc` |
 
-## 当前 100-Rollout Eval
+## 100-Rollout Eval
 
 启动命令：
 
@@ -116,19 +116,30 @@ eval result 目录规则：
 eval_result/pi0_lora_baseline/<task>_raw_100_video5_20260614_pi0_baseline_100/
 ```
 
-本轮结果完成后，将把 `_result.txt` 中的 success rate 汇总到下表：
+每个任务目录包含 `_result.txt`、`eval_log.txt`、`stdout.log`、`config.yaml`、
+`command.txt` 和 `episode0.mp4` 到 `episode4.mp4`。复现所需 commit、cwd、命令
+和白名单环境变量由各目录的 `command.txt` 自动记录，README 不重复手写。
 
-| Task | Result | Success | Eval result |
-| --- | ---: | ---: | --- |
-| `swap_blocks` | pending | pending | `eval_result/pi0_lora_baseline/swap_blocks_raw_100_video5_20260614_pi0_baseline_100` |
-| `swap_T` | pending | pending | `eval_result/pi0_lora_baseline/swap_T_raw_100_video5_20260614_pi0_baseline_100` |
-| `put_back_block` | pending | pending | `eval_result/pi0_lora_baseline/put_back_block_raw_100_video5_20260614_pi0_baseline_100` |
-| `observe_and_pickup` | pending | pending | `eval_result/pi0_lora_baseline/observe_and_pickup_raw_100_video5_20260614_pi0_baseline_100` |
-| `rearrange_blocks` | pending | pending | `eval_result/pi0_lora_baseline/rearrange_blocks_raw_100_video5_20260614_pi0_baseline_100` |
-| `cover_blocks` | pending | pending | `eval_result/pi0_lora_baseline/cover_blocks_raw_100_video5_20260614_pi0_baseline_100` |
-| `battery_try` | pending | pending | `eval_result/pi0_lora_baseline/battery_try_raw_100_video5_20260614_pi0_baseline_100` |
-| `press_button` | pending | pending | `eval_result/pi0_lora_baseline/press_button_raw_100_video5_20260614_pi0_baseline_100` |
-| `blocks_ranking_try` | pending | pending | `eval_result/pi0_lora_baseline/blocks_ranking_try_raw_100_video5_20260614_pi0_baseline_100` |
+本轮 9 个任务均 returncode 0，无 worker failed。论文 Pi0.5 数值来自 RMBench Table 1。
+
+| Task | Result | Success | Paper Pi0.5 | Eval result |
+| --- | ---: | ---: | ---: | --- |
+| `swap_blocks` | 16/100 | 16% | 24% | `eval_result/pi0_lora_baseline/swap_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `swap_T` | 13/100 | 13% | 15% | `eval_result/pi0_lora_baseline/swap_T_raw_100_video5_20260614_pi0_baseline_100` |
+| `put_back_block` | 7/100 | 7% | 11% | `eval_result/pi0_lora_baseline/put_back_block_raw_100_video5_20260614_pi0_baseline_100` |
+| `observe_and_pickup` | 4/100 | 4% | 9% | `eval_result/pi0_lora_baseline/observe_and_pickup_raw_100_video5_20260614_pi0_baseline_100` |
+| `rearrange_blocks` | 1/100 | 1% | 13% | `eval_result/pi0_lora_baseline/rearrange_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `cover_blocks` | 1/100 | 1% | 0% | `eval_result/pi0_lora_baseline/cover_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `battery_try` | 8/100 | 8% | 16% | `eval_result/pi0_lora_baseline/battery_try_raw_100_video5_20260614_pi0_baseline_100` |
+| `press_button` | 3/100 | 3% | 0% | `eval_result/pi0_lora_baseline/press_button_raw_100_video5_20260614_pi0_baseline_100` |
+| `blocks_ranking_try` | 16/100 | 16% | 6% | `eval_result/pi0_lora_baseline/blocks_ranking_try_raw_100_video5_20260614_pi0_baseline_100` |
+
+汇总：
+
+```text
+mean success rate over 9 tasks: 69/900 = 7.7%
+paper Pi0.5 mean over 9 tasks: 94/900 = 10.4%
+```
 
 ## 历史 3 任务结果
 
