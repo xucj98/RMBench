@@ -1131,7 +1131,7 @@ job_type: train
 2. 每个任务的正式 norm_stats 已不带 `--max-frames` 重新计算，并覆盖 smoke norm_stats。
 3. 每个 checkpoint 目录包含训练命令、commit、resolved config 或等价 metadata。
 4. 每个任务都有 wandb id，wandb project/group/name 符合规范。
-5. checkpoint metadata、wandb config/artifact 和 checkpoint 中保存的 meta/rmbench/ 四文件快照能互相追溯。
+5. checkpoint metadata、wandb run files 和 checkpoint 中保存的 meta/rmbench/ 四文件快照能互相追溯。
 ```
 
 提交要求：
@@ -1142,7 +1142,7 @@ job_type: train
 正式训练完成后必须先按验收标准自查，再次更新并提交 README，补充完成状态、最终 checkpoint、wandb id 和必要观察。
 ```
 
-### 8. 正式评测与 README 更新 （未审核）
+### 8. 正式评测与 Eval Metadata 设计（待实现）
 
 第 7 阶段训练完成并提交 `experiments/pi0_key_state_baseline/README.md` 完成记录后，先用同一 eval 入口和同一 checkpoint 跑小规模 eval smoke，例如 3 rollouts、1 个 overlay 视频，输出到 ignored smoke 目录。eval smoke 通过并确认正式运行相关 worktree 干净后，再在 clean commit 上对四个任务分别进行正式 eval，得到 pi0 + key-state SR。评测默认打开 key-state overlay 视频，结果按实验批次组织：
 
@@ -1150,15 +1150,61 @@ job_type: train
 eval_result/pi0_key_state_baseline/<run_id>/
 ```
 
+eval result 不只保存本次 eval 的 `config.yaml` 和 `command.txt`，还必须复制被评测 checkpoint 的轻量 metadata 快照。当前 pi05 checkpoint 的 metadata 位于：
+
+```text
+policy/pi05/checkpoints/<train_config_name>/<model_name>/metadata/
+  train_config.yaml
+  command.txt
+  rmbench_data_meta/
+    key_state_config.yaml
+    convert_command.txt
+    source_data_config.yaml
+    source_data_command.txt
+```
+
+eval 目录中保存为：
+
+```text
+eval_result/pi0_key_state_baseline/<run_id>/
+  _result.txt
+  eval_log.txt
+  stdout.log
+  config.yaml
+  command.txt
+  checkpoint_metadata/
+    train_config.yaml
+    command.txt
+    rmbench_data_meta/
+      key_state_config.yaml
+      convert_command.txt
+      source_data_config.yaml
+      source_data_command.txt
+```
+
+`checkpoint_metadata/` 是复现快照，不复制权重、assets 或 LeRobot 标准 meta 整目录。eval 自身的 `config.yaml` 应记录 checkpoint 路径和 metadata 源路径；checkpoint 的训练命令、数据生成命令和转换命令以 `checkpoint_metadata/` 中复制的文件为准。
+
+key-state runtime 和视频 overlay 也必须从 checkpoint metadata 读取 schema，不再依赖静态 train config 或 `policy_metadata`。具体规则：
+
+```text
+1. 原版 pi0/pi05 checkpoint 可以没有 key_state_config.yaml；这类模型按普通 state/action eval，不启用 key-state memory，也不显示 key-state overlay。
+2. `pi0_aloha_key_state_lora` 及后续 key-state train config 必须有 checkpoint 原始 metadata/rmbench_data_meta/key_state_config.yaml；缺少时直接抛异常，不兼容旧 put_back_block checkpoint 的硬编码 fallback。
+3. eval 目录中的 checkpoint_metadata/ 是 checkpoint 原始 metadata 的快照，用于复现和核查。
+4. phase 和 attribute 的 name、dim、labels 来自 key_state_config.yaml 的 config.phase 与 config.attributes。
+5. state 写入使用 schema 中的绝对 dim 区间，例如 [14, 17]、[17, 20]，不能写死 put_back_block 的 14:22 或 phase/mat。
+6. overlay 逐项显示当前 schema 中的 phase/attribute label；任务没有 attribute 时只显示 phase。
+```
+
 验收标准：
 
 ```text
 1. 每个任务完成 100 rollouts，前 5 个 rollout 录制 overlay 视频。
-2. eval_result 目录包含 _result.txt、eval_log.txt、stdout.log、config.yaml、command.txt、key_state_config.yaml。
+2. eval_result 目录包含 _result.txt、eval_log.txt、stdout.log、config.yaml、command.txt、checkpoint_metadata/。
 3. command.txt 记录 git commit、cwd、白名单 env 和启动命令。
-4. overlay 显示当前任务的 phase/attribute label，不再写死 put_back_block 的 phase/mat。
-5. `experiments/pi0_key_state_baseline/README.md` 记录每个任务的 checkpoint、eval result、wandb id、SR 和必要观察。
-6. `experiments/pi0_key_state_baseline/README.md` 的主结果表只记录正式完成的训练和评测；smoke、失败启动、半成品不进入主结果表。
+4. checkpoint_metadata/ 包含 train_config.yaml、训练 command.txt 和 rmbench_data_meta/ 四文件快照。
+5. overlay 显示当前任务的 phase/attribute label，不再写死 put_back_block 的 phase/mat。
+6. `experiments/pi0_key_state_baseline/README.md` 记录每个任务的 checkpoint、eval result、wandb id、SR 和必要观察。
+7. `experiments/pi0_key_state_baseline/README.md` 的主结果表只记录正式完成的训练和评测；smoke、失败启动、半成品不进入主结果表。
 ```
 
 提交要求：
