@@ -24,8 +24,7 @@ README 只记录批次语义、路径和验收摘要，不手写这些复现字�
 当前状态：
 
 ```text
-rearrange_blocks / swap_blocks / cover_blocks 的正式 50ep 数据生成完成。
-battery_try 的旧 50ep 数据包含过粗的 micro stage 标注，修正后正在重生成，尚未验收。
+rearrange_blocks / swap_blocks / battery_try / cover_blocks 的正式 50ep 数据生成完成。
 ```
 
 验收结果：
@@ -33,6 +32,7 @@ battery_try 的旧 50ep 数据包含过粗的 micro stage 标注，修正后正�
 ```text
 rearrange_blocks: 50 hdf5, 50 instructions, frames 398-409, micro_stages=9
 swap_blocks:      50 hdf5, 50 instructions, frames 584-681, micro_stages=14
+battery_try:      50 hdf5, 50 instructions, frames 455-883, micro_stages=10/14/18
 cover_blocks:     50 hdf5, 50 instructions, frames 996-1055, micro_stages=28/29
 ```
 
@@ -70,8 +70,7 @@ cover_blocks:     repo_id=cover_blocks_demo_clean_state_key_state
 当前状态：
 
 ```text
-rearrange_blocks / swap_blocks / cover_blocks 的正式 50ep LeRobot 转换完成。
-battery_try 需要等待修正后的 demo_clean_state 生成完成后重新转换。
+rearrange_blocks / swap_blocks / battery_try / cover_blocks 的正式 50ep LeRobot 转换完成。
 ```
 
 验收结果：
@@ -79,6 +78,7 @@ battery_try 需要等待修正后的 demo_clean_state 生成完成后重新转�
 ```text
 rearrange_blocks: 50 episodes, frames 397-408, state/action=32
 swap_blocks:      50 episodes, frames 583-680, state/action=32
+battery_try:      50 episodes, frames 454-882, state/action=32
 cover_blocks:     50 episodes, frames 995-1054, state/action=32
 ```
 
@@ -115,10 +115,10 @@ logs/pi0_key_state_baseline/
 当前正式训练状态：
 
 ```text
+battery_try:      running, GPU0, exp_name=pi0_key_state_baseline_battery_try,      wandb=llxfe4ne
 rearrange_blocks: running, GPU1, exp_name=pi0_key_state_baseline_rearrange_blocks, wandb=8wz0kr5q
 swap_blocks:      running, GPU2, exp_name=pi0_key_state_baseline_swap_blocks,      wandb=5i2sl3mh
 cover_blocks:     running, GPU3, exp_name=pi0_key_state_baseline_cover_blocks,     wandb=2ih7m18m
-battery_try:      pending; wait for corrected demo_clean_state, LeRobot conversion, and norm stats.
 ```
 
 已完成的 norm stats：
@@ -126,6 +126,7 @@ battery_try:      pending; wait for corrected demo_clean_state, LeRobot conversi
 ```text
 policy/pi05/assets/pi0_aloha_key_state_lora/rearrange_blocks_demo_clean_state_key_state/norm_stats.json
 policy/pi05/assets/pi0_aloha_key_state_lora/swap_blocks_demo_clean_state_key_state/norm_stats.json
+policy/pi05/assets/pi0_aloha_key_state_lora/battery_try_demo_clean_state_key_state/norm_stats.json
 policy/pi05/assets/pi0_aloha_key_state_lora/cover_blocks_demo_clean_state_key_state/norm_stats.json
 ```
 
