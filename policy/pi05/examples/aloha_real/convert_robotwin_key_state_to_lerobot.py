@@ -43,6 +43,7 @@ ROBOT_DIM_NAMES = [
     "right_gripper",
 ]
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
+SUPPORTED_ENCODINGS = {"one_hot", "label_id"}
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -226,6 +227,13 @@ def _labels(config: dict[str, Any]) -> list[str]:
     return [str(item) for item in labels]
 
 
+def _encoding(config: dict[str, Any]) -> str:
+    encoding = str(config.get("encoding", "one_hot"))
+    if encoding not in SUPPORTED_ENCODINGS:
+        raise ValueError(f"Unsupported encoding {encoding!r}; expected one of {sorted(SUPPORTED_ENCODINGS)}")
+    return encoding
+
+
 def _dim(config: dict[str, Any]) -> tuple[int, int]:
     dim = config.get("dim")
     if not isinstance(dim, list) or len(dim) != 2:
@@ -238,6 +246,17 @@ def _label_index(labels: list[str], value: Any) -> int:
     if value not in labels:
         raise ValueError(f"Value {value!r} not found in labels {labels}")
     return labels.index(value)
+
+
+def _encoded_label(index: int, block_config: dict[str, Any]) -> np.ndarray:
+    start, end = _dim(block_config)
+    width = end - start
+    encoding = _encoding(block_config)
+    if encoding == "one_hot":
+        return _one_hot(index, width)
+    if encoding == "label_id":
+        return np.array([float(index)], dtype=np.float32)
+    raise ValueError(f"Unsupported encoding: {encoding}")
 
 
 def _phase_ranges(
@@ -312,18 +331,30 @@ def _feature_names(config: dict[str, Any]) -> list[str]:
     phase_config = config["phase"]
     start, end = _dim(phase_config)
     labels = _labels(phase_config)
-    if end - start != len(labels):
-        raise ValueError("Phase dim size does not match labels")
-    for offset, label in enumerate(labels):
-        names[start + offset] = f"phase_{label}"
+    encoding = _encoding(phase_config)
+    if encoding == "one_hot":
+        if end - start != len(labels):
+            raise ValueError("Phase dim size does not match labels")
+        for offset, label in enumerate(labels):
+            names[start + offset] = f"phase_{label}"
+    else:
+        if end - start != 1:
+            raise ValueError("label_id phase encoding must use exactly one dim")
+        names[start] = "phase_label_id"
 
     for attr_config in config.get("attributes", []):
         attr_start, attr_end = _dim(attr_config)
         attr_labels = _labels(attr_config)
-        if attr_end - attr_start != len(attr_labels):
-            raise ValueError(f"Attribute {attr_config.get('name')} dim size does not match labels")
-        for offset, label in enumerate(attr_labels):
-            names[attr_start + offset] = f"{attr_config['name']}_{label}"
+        attr_encoding = _encoding(attr_config)
+        if attr_encoding == "one_hot":
+            if attr_end - attr_start != len(attr_labels):
+                raise ValueError(f"Attribute {attr_config.get('name')} dim size does not match labels")
+            for offset, label in enumerate(attr_labels):
+                names[attr_start + offset] = f"{attr_config['name']}_{label}"
+        else:
+            if attr_end - attr_start != 1:
+                raise ValueError(f"label_id attribute encoding must use exactly one dim: {attr_config.get('name')}")
+            names[attr_start] = f"{attr_config['name']}_label_id"
 
     for idx, name in enumerate(names):
         if name == f"dim_{idx}":
@@ -339,8 +370,20 @@ def _validate_layout(config: dict[str, Any]) -> None:
     blocks = [config["phase"], *config.get("attributes", [])]
     for block in blocks:
         start, end = _dim(block)
+        labels = _labels(block)
+        width = end - start
         if start < 0 or end > state_dim or start >= end:
             raise ValueError(f"Invalid dim {block.get('name', 'phase')}: {[start, end]}")
+        if _encoding(block) == "one_hot" and width != len(labels):
+            raise ValueError(
+                f"one_hot dim size must match labels for {block.get('name', 'phase')}: "
+                f"dim={[start, end]}, labels={labels}"
+            )
+        if _encoding(block) == "label_id" and width != 1:
+            raise ValueError(
+                f"label_id dim size must be 1 for {block.get('name', 'phase')}: "
+                f"dim={[start, end]}"
+            )
         if occupied[start:end].any():
             raise ValueError(f"Overlapping dim {block.get('name', 'phase')}: {[start, end]}")
         occupied[start:end] = 1
@@ -424,14 +467,14 @@ def _populate_episode(
             action[:robot_dim] = vector[frame_idx + 1, :robot_dim].astype(np.float32)
 
             phase_start, phase_end = _dim(config["phase"])
-            state[phase_start:phase_end] = _one_hot(_phase_at(frame_idx, phase_ranges), phase_end - phase_start)
-            action[phase_start:phase_end] = _one_hot(_phase_at(frame_idx + 1, phase_ranges), phase_end - phase_start)
+            state[phase_start:phase_end] = _encoded_label(_phase_at(frame_idx, phase_ranges), config["phase"])
+            action[phase_start:phase_end] = _encoded_label(_phase_at(frame_idx + 1, phase_ranges), config["phase"])
 
             for attr_config in config.get("attributes", []):
                 attr_start, attr_end = _dim(attr_config)
                 attr_state_idx, attr_target_idx = _attribute_indices(attr_config, info, total_frames, frame_idx)
-                state[attr_start:attr_end] = _one_hot(attr_state_idx, attr_end - attr_start)
-                action[attr_start:attr_end] = _one_hot(attr_target_idx, attr_end - attr_start)
+                state[attr_start:attr_end] = _encoded_label(attr_state_idx, attr_config)
+                action[attr_start:attr_end] = _encoded_label(attr_target_idx, attr_config)
 
             frame = {
                 "observation.state": state,
@@ -498,17 +541,13 @@ def convert(config: dict[str, Any], argv: list[str]) -> None:
     scene_info = _validate_source(config)
     dataset = _create_empty_dataset(config)
 
-    summaries = []
     for episode_idx in tqdm.tqdm(range(int(config["dataset"]["episodes"])), desc=f"Converting {config['dataset']['repo_id']}"):
-        summaries.append(_populate_episode(dataset, config, episode_idx, scene_info))
+        _populate_episode(dataset, config, episode_idx, scene_info)
 
     dataset_path = Path(HF_LEROBOT_HOME) / config["dataset"]["repo_id"]
     rmbench_meta_dir = dataset_path / "meta" / "rmbench"
     rmbench_meta_dir.mkdir(parents=True, exist_ok=True)
-    _write_yaml(rmbench_meta_dir / "key_state_config.yaml", {
-        "config": config,
-        "episodes": summaries,
-    })
+    _write_yaml(rmbench_meta_dir / "key_state_config.yaml", config)
     _write_command(rmbench_meta_dir / "convert_command.txt", argv)
     _copy_source_metadata(config, rmbench_meta_dir)
 

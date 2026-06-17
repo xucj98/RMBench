@@ -1,0 +1,59 @@
+dataset:
+  task: cover_blocks
+  source_dir: data/cover_blocks/demo_clean_state
+  repo_id: cover_blocks_demo_clean_state_key_state_label_id
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+phase:
+  dim: [14, 15]
+  encoding: label_id
+  labels:
+    - cover_left_position
+    - cover_middle_position
+    - cover_right_position
+    - uncover_red_block
+    - uncover_green_block
+    - uncover_blue_block
+  ranges:
+    - label: cover_left_position
+      window: [episode_start, micro_stages.cover_left_position_release.end_frame]
+    - label: cover_middle_position
+      window: [micro_stages.cover_left_position_release.end_frame, micro_stages.cover_middle_position_release.end_frame]
+    - label: cover_right_position
+      window: [micro_stages.cover_middle_position_release.end_frame, micro_stages.cover_right_position_release.end_frame]
+    - label: uncover_red_block
+      window: [micro_stages.cover_right_position_release.end_frame, micro_stages.uncover_red_block_release.end_frame]
+    - label: uncover_green_block
+      window: [micro_stages.uncover_red_block_release.end_frame, micro_stages.uncover_green_block_release.end_frame]
+    - label: uncover_blue_block
+      window: [micro_stages.uncover_green_block_release.end_frame, episode_end]
+
+attributes:
+  - name: red_pos
+    dim: [15, 16]
+    encoding: label_id
+    labels: [unknown, left, middle, right]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.rgb_positions.red
+        update_window: [episode_start, micro_stages.cover_left_position_place.start_frame]
+  - name: green_pos
+    dim: [16, 17]
+    encoding: label_id
+    labels: [unknown, left, middle, right]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.rgb_positions.green
+        update_window: [episode_start, micro_stages.cover_left_position_place.start_frame]
+  - name: blue_pos
+    dim: [17, 18]
+    encoding: label_id
+    labels: [unknown, left, middle, right]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.rgb_positions.blue
+        update_window: [episode_start, micro_stages.cover_left_position_place.start_frame]

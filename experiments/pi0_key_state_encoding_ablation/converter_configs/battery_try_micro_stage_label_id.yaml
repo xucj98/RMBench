@@ -1,0 +1,77 @@
+dataset:
+  task: battery_try
+  source_dir: data/battery_try/demo_clean_state
+  repo_id: battery_try_demo_clean_state_key_state_micro_stage_label_id
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+phase:
+  dim: [14, 15]
+  encoding: label_id
+  labels:
+    - place_initial_00_dual_pick
+    - place_initial_00_dual_lift
+    - place_initial_00_battery1_place
+    - place_initial_00_battery1_return
+    - place_initial_00_battery2_place
+    - place_initial_00_battery2_return
+    - try_10_battery1_pick
+    - try_10_battery1_lift
+    - try_10_battery1_place
+    - try_10_battery1_return
+    - try_11_battery2_pick
+    - try_11_battery2_lift
+    - try_11_battery2_place
+    - try_11_battery2_return
+    - try_01_battery1_pick
+    - try_01_battery1_lift
+    - try_01_battery1_place
+    - try_01_battery1_return
+  ranges:
+    - label: place_initial_00_dual_pick
+      window: [micro_stages.place_initial_00_dual_pick.start_frame, micro_stages.place_initial_00_dual_pick.end_frame]
+    - label: place_initial_00_dual_lift
+      window: [micro_stages.place_initial_00_dual_lift.start_frame, micro_stages.place_initial_00_dual_lift.end_frame]
+    - label: place_initial_00_battery1_place
+      window: [micro_stages.place_initial_00_battery1_place.start_frame, micro_stages.place_initial_00_battery1_place.end_frame]
+    - label: place_initial_00_battery1_return
+      window: [micro_stages.place_initial_00_battery1_return.start_frame, micro_stages.place_initial_00_battery1_return.end_frame]
+    - label: place_initial_00_battery2_place
+      window: [micro_stages.place_initial_00_battery2_place.start_frame, micro_stages.place_initial_00_battery2_place.end_frame]
+    - label: place_initial_00_battery2_return
+      window: [micro_stages.place_initial_00_battery2_return.start_frame, micro_stages.place_initial_00_battery2_return.end_frame]
+    - label: try_10_battery1_pick
+      window: [micro_stages.try_10_battery1_pick.start_frame, micro_stages.try_10_battery1_pick.end_frame]
+    - label: try_10_battery1_lift
+      window: [micro_stages.try_10_battery1_lift.start_frame, micro_stages.try_10_battery1_lift.end_frame]
+    - label: try_10_battery1_place
+      window: [micro_stages.try_10_battery1_place.start_frame, micro_stages.try_10_battery1_place.end_frame]
+    - label: try_10_battery1_return
+      window: [micro_stages.try_10_battery1_return.start_frame, micro_stages.try_10_battery1_return.end_frame]
+    - label: try_11_battery2_pick
+      window: [micro_stages.try_11_battery2_pick.start_frame, micro_stages.try_11_battery2_pick.end_frame]
+      optional: true
+    - label: try_11_battery2_lift
+      window: [micro_stages.try_11_battery2_lift.start_frame, micro_stages.try_11_battery2_lift.end_frame]
+      optional: true
+    - label: try_11_battery2_place
+      window: [micro_stages.try_11_battery2_place.start_frame, micro_stages.try_11_battery2_place.end_frame]
+      optional: true
+    - label: try_11_battery2_return
+      window: [micro_stages.try_11_battery2_return.start_frame, micro_stages.try_11_battery2_return.end_frame]
+      optional: true
+    - label: try_01_battery1_pick
+      window: [micro_stages.try_01_battery1_pick.start_frame, micro_stages.try_01_battery1_pick.end_frame]
+      optional: true
+    - label: try_01_battery1_lift
+      window: [micro_stages.try_01_battery1_lift.start_frame, micro_stages.try_01_battery1_lift.end_frame]
+      optional: true
+    - label: try_01_battery1_place
+      window: [micro_stages.try_01_battery1_place.start_frame, micro_stages.try_01_battery1_place.end_frame]
+      optional: true
+    - label: try_01_battery1_return
+      window: [micro_stages.try_01_battery1_return.start_frame, micro_stages.try_01_battery1_return.end_frame]
+      optional: true
