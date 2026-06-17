@@ -170,9 +170,17 @@ def _as_abs_path(path: str | Path) -> Path:
 def _get_nested(value: Any, path: list[str]) -> Any:
     cursor = value
     for part in path:
-        if not isinstance(cursor, dict) or part not in cursor:
+        if isinstance(cursor, dict):
+            if part not in cursor:
+                raise KeyError(".".join(path))
+            cursor = cursor[part]
+        elif isinstance(cursor, list):
+            try:
+                cursor = cursor[int(part)]
+            except (ValueError, IndexError) as exc:
+                raise KeyError(".".join(path)) from exc
+        else:
             raise KeyError(".".join(path))
-        cursor = cursor[part]
     return cursor
 
 
@@ -259,31 +267,32 @@ def _encoded_label(index: int, block_config: dict[str, Any]) -> np.ndarray:
     raise ValueError(f"Unsupported encoding: {encoding}")
 
 
-def _phase_ranges(
-    phase_config: dict[str, Any],
+def _range_labels(
+    block_config: dict[str, Any],
     info: dict[str, Any],
     total_frames: int,
+    block_name: str,
 ) -> list[tuple[int, int, int, str]]:
-    labels = _labels(phase_config)
+    labels = _labels(block_config)
     ranges = []
-    for item in phase_config.get("ranges", []):
-        label = str(item["label"])
-        if label not in labels:
-            raise ValueError(f"Phase range label {label!r} not in labels {labels}")
+    for item in block_config.get("ranges", []):
         try:
+            label = str(_resolve_ref(item["label"], info, total_frames))
             start, end = _resolve_window(item["window"], info, total_frames)
         except KeyError:
             if item.get("optional", False):
                 continue
             raise
+        if label not in labels:
+            raise ValueError(f"{block_name} range label {label!r} not in labels {labels}")
         ranges.append((_label_index(labels, label), start, end, label))
     ranges.sort(key=lambda item: item[1])
     if not ranges:
-        raise ValueError("No phase ranges resolved")
+        raise ValueError(f"No {block_name} ranges resolved")
     return ranges
 
 
-def _phase_at(frame_idx: int, ranges: list[tuple[int, int, int, str]]) -> int:
+def _label_at(frame_idx: int, ranges: list[tuple[int, int, int, str]]) -> int:
     for index, start, end, _label in ranges:
         if start <= frame_idx < end:
             return index
@@ -321,6 +330,39 @@ def _attribute_indices(
     return _label_index(labels, state_value), _label_index(labels, target_value)
 
 
+def _execution_blocks(config: dict[str, Any]) -> list[dict[str, Any]]:
+    execution = config.get("execution", [])
+    if isinstance(execution, dict):
+        return [execution]
+    return list(execution or [])
+
+
+def _schema_blocks(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    blocks = []
+    if config.get("phase") is not None:
+        blocks.append(("phase", config["phase"]))
+    for execution_config in _execution_blocks(config):
+        blocks.append((str(execution_config.get("name", "execution")), execution_config))
+    for attr_config in config.get("attributes", []):
+        blocks.append((str(attr_config.get("name", "attribute")), attr_config))
+    return blocks
+
+
+def _set_feature_names(names: list[str], block_name: str, block_config: dict[str, Any]) -> None:
+    start, end = _dim(block_config)
+    labels = _labels(block_config)
+    encoding = _encoding(block_config)
+    if encoding == "one_hot":
+        if end - start != len(labels):
+            raise ValueError(f"{block_name} dim size does not match labels")
+        for offset, label in enumerate(labels):
+            names[start + offset] = f"{block_name}_{label}"
+    else:
+        if end - start != 1:
+            raise ValueError(f"label_id {block_name} encoding must use exactly one dim")
+        names[start] = f"{block_name}_label_id"
+
+
 def _feature_names(config: dict[str, Any]) -> list[str]:
     state_dim = int(config["state_layout"].get("state_dim", 32))
     robot_dim = int(config["state_layout"].get("robot_dim", 14))
@@ -328,33 +370,8 @@ def _feature_names(config: dict[str, Any]) -> list[str]:
     for idx in range(min(robot_dim, len(ROBOT_DIM_NAMES))):
         names[idx] = ROBOT_DIM_NAMES[idx]
 
-    phase_config = config["phase"]
-    start, end = _dim(phase_config)
-    labels = _labels(phase_config)
-    encoding = _encoding(phase_config)
-    if encoding == "one_hot":
-        if end - start != len(labels):
-            raise ValueError("Phase dim size does not match labels")
-        for offset, label in enumerate(labels):
-            names[start + offset] = f"phase_{label}"
-    else:
-        if end - start != 1:
-            raise ValueError("label_id phase encoding must use exactly one dim")
-        names[start] = "phase_label_id"
-
-    for attr_config in config.get("attributes", []):
-        attr_start, attr_end = _dim(attr_config)
-        attr_labels = _labels(attr_config)
-        attr_encoding = _encoding(attr_config)
-        if attr_encoding == "one_hot":
-            if attr_end - attr_start != len(attr_labels):
-                raise ValueError(f"Attribute {attr_config.get('name')} dim size does not match labels")
-            for offset, label in enumerate(attr_labels):
-                names[attr_start + offset] = f"{attr_config['name']}_{label}"
-        else:
-            if attr_end - attr_start != 1:
-                raise ValueError(f"label_id attribute encoding must use exactly one dim: {attr_config.get('name')}")
-            names[attr_start] = f"{attr_config['name']}_label_id"
+    for block_name, block_config in _schema_blocks(config):
+        _set_feature_names(names, block_name, block_config)
 
     for idx, name in enumerate(names):
         if name == f"dim_{idx}":
@@ -367,25 +384,24 @@ def _validate_layout(config: dict[str, Any]) -> None:
     occupied = np.zeros(state_dim, dtype=np.int32)
     robot_dim = int(config["state_layout"].get("robot_dim", 14))
     occupied[:robot_dim] = 1
-    blocks = [config["phase"], *config.get("attributes", [])]
-    for block in blocks:
+    for block_name, block in _schema_blocks(config):
         start, end = _dim(block)
         labels = _labels(block)
         width = end - start
         if start < 0 or end > state_dim or start >= end:
-            raise ValueError(f"Invalid dim {block.get('name', 'phase')}: {[start, end]}")
+            raise ValueError(f"Invalid dim {block_name}: {[start, end]}")
         if _encoding(block) == "one_hot" and width != len(labels):
             raise ValueError(
-                f"one_hot dim size must match labels for {block.get('name', 'phase')}: "
+                f"one_hot dim size must match labels for {block_name}: "
                 f"dim={[start, end]}, labels={labels}"
             )
         if _encoding(block) == "label_id" and width != 1:
             raise ValueError(
-                f"label_id dim size must be 1 for {block.get('name', 'phase')}: "
+                f"label_id dim size must be 1 for {block_name}: "
                 f"dim={[start, end]}"
             )
         if occupied[start:end].any():
-            raise ValueError(f"Overlapping dim {block.get('name', 'phase')}: {[start, end]}")
+            raise ValueError(f"Overlapping dim {block_name}: {[start, end]}")
         occupied[start:end] = 1
 
 
@@ -457,7 +473,14 @@ def _populate_episode(
         vector = ep["/joint_action/vector"][:].astype(np.float32)
         total_frames = int(vector.shape[0])
         action_frames = total_frames - 1
-        phase_ranges = _phase_ranges(config["phase"], info, total_frames)
+        per_step_blocks = []
+        if config.get("phase") is not None:
+            per_step_blocks.append(("phase", config["phase"]))
+        per_step_blocks.extend((str(item.get("name", "execution")), item) for item in _execution_blocks(config))
+        per_step_ranges = [
+            (block_name, block_config, _range_labels(block_config, info, total_frames, block_name))
+            for block_name, block_config in per_step_blocks
+        ]
 
         for frame_idx in range(action_frames):
             state = np.zeros(int(config["state_layout"].get("state_dim", 32)), dtype=np.float32)
@@ -466,9 +489,10 @@ def _populate_episode(
             state[:robot_dim] = vector[frame_idx, :robot_dim].astype(np.float32)
             action[:robot_dim] = vector[frame_idx + 1, :robot_dim].astype(np.float32)
 
-            phase_start, phase_end = _dim(config["phase"])
-            state[phase_start:phase_end] = _encoded_label(_phase_at(frame_idx, phase_ranges), config["phase"])
-            action[phase_start:phase_end] = _encoded_label(_phase_at(frame_idx + 1, phase_ranges), config["phase"])
+            for _block_name, block_config, ranges in per_step_ranges:
+                start, end = _dim(block_config)
+                state[start:end] = _encoded_label(_label_at(frame_idx, ranges), block_config)
+                action[start:end] = _encoded_label(_label_at(frame_idx + 1, ranges), block_config)
 
             for attr_config in config.get("attributes", []):
                 attr_start, attr_end = _dim(attr_config)
@@ -486,15 +510,17 @@ def _populate_episode(
             dataset.add_frame(frame)
 
     dataset.save_episode()
-    return {
+    summary = {
         "episode_idx": episode_idx,
         "frames": action_frames,
         "source_frames": total_frames,
-        "phase_ranges": [
-            {"label": label, "start_frame": start, "end_frame": end}
-            for _idx, start, end, label in phase_ranges
-        ],
     }
+    for block_name, _block_config, ranges in per_step_ranges:
+        summary[f"{block_name}_ranges"] = [
+            {"label": label, "start_frame": start, "end_frame": end}
+            for _idx, start, end, label in ranges
+        ]
+    return summary
 
 
 def _copy_source_metadata(config: dict[str, Any], rmbench_meta_dir: Path) -> None:

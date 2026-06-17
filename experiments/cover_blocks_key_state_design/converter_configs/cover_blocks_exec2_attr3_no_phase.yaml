@@ -1,0 +1,66 @@
+dataset:
+  task: cover_blocks
+  source_dir: data/cover_blocks/demo_clean_state
+  repo_id: cover_blocks_demo_clean_state_key_state_exec2_attr3_no_phase
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+execution:
+  - name: operation
+    dim: [14, 15]
+    encoding: label_id
+    labels: [cover, uncover]
+    ranges:
+      - label: cover
+        window: [episode_start, micro_stages.cover_right_position_release.end_frame]
+      - label: uncover
+        window: [micro_stages.cover_right_position_release.end_frame, episode_end]
+
+  - name: slot
+    dim: [15, 16]
+    encoding: label_id
+    labels: [left, middle, right]
+    ranges:
+      - label: left
+        window: [episode_start, micro_stages.cover_left_position_release.end_frame]
+      - label: middle
+        window: [micro_stages.cover_left_position_release.end_frame, micro_stages.cover_middle_position_release.end_frame]
+      - label: right
+        window: [micro_stages.cover_middle_position_release.end_frame, micro_stages.cover_right_position_release.end_frame]
+      - label: task_facts.open_order_positions.0
+        window: [micro_stages.cover_right_position_release.end_frame, micro_stages.uncover_red_block_release.end_frame]
+      - label: task_facts.open_order_positions.1
+        window: [micro_stages.uncover_red_block_release.end_frame, micro_stages.uncover_green_block_release.end_frame]
+      - label: task_facts.open_order_positions.2
+        window: [micro_stages.uncover_green_block_release.end_frame, episode_end]
+
+attributes:
+  - name: open_slot_0
+    dim: [16, 17]
+    encoding: label_id
+    labels: [unknown, left, middle, right]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.open_order_positions.0
+        update_window: [episode_start, micro_stages.cover_left_position_place.start_frame]
+
+  - name: open_slot_1
+    dim: [17, 18]
+    encoding: label_id
+    labels: [unknown, left, middle, right]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.open_order_positions.1
+        update_window: [episode_start, micro_stages.cover_left_position_place.start_frame]
+
+  - name: open_slot_2
+    dim: [18, 19]
+    encoding: label_id
+    labels: [unknown, left, middle, right]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.open_order_positions.2
+        update_window: [episode_start, micro_stages.cover_left_position_place.start_frame]
