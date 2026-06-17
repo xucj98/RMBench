@@ -7,6 +7,8 @@ import json
 import sys
 import jax
 import numpy as np
+from pathlib import Path
+import yaml
 from openpi.models import model as _model
 from openpi.policies import aloha_policy
 from openpi.policies import policy_config as _policy_config
@@ -25,23 +27,8 @@ from openpi.training import data_loader as _data_loader
 import os
 
 
-KEY_STATE_ACTION_OFFSET = 14
-KEY_STATE_PHASE_SLICE = slice(KEY_STATE_ACTION_OFFSET, KEY_STATE_ACTION_OFFSET + 3)
-KEY_STATE_MAT_SLICE = slice(KEY_STATE_ACTION_OFFSET + 3, KEY_STATE_ACTION_OFFSET + 8)
-DEFAULT_KEY_STATE_SCHEMA = [
-    {
-        "name": "phase",
-        "size": 3,
-        "labels": ["move_to_center", "press_button", "move_back"],
-        "update_rule": {"type": "monotonic", "max_step": 1},
-    },
-    {
-        "name": "mat",
-        "size": 5,
-        "labels": ["unknown", "left", "right", "front", "back"],
-        "update_rule": {"type": "latch_once_nonzero", "unknown_index": 0},
-    },
-]
+CHECKPOINT_ROOT = Path("policy/pi05/checkpoints")
+KEY_STATE_CONFIG_RELATIVE_PATH = Path("metadata/rmbench_data_meta/key_state_config.yaml")
 
 
 class PI0:
@@ -54,17 +41,31 @@ class PI0:
             raise ValueError(f"Unsupported key_state_update_mode: {key_state_update_mode}")
         self.key_state_update_mode = key_state_update_mode
 
-        specified_path = f"policy/pi05/checkpoints/{self.train_config_name}/{self.model_name}/{self.checkpoint_id}/assets/"
+        self.checkpoint_dir = CHECKPOINT_ROOT / self.train_config_name / self.model_name / str(self.checkpoint_id)
+        self.checkpoint_run_dir = self.checkpoint_dir.parent
+        specified_path = self.checkpoint_dir / "assets"
         entries = os.listdir(specified_path)
         assets_id = entries[0]
 
         config = _config.get_config(self.train_config_name)
         self.policy_metadata = config.policy_metadata or {}
-        self.key_state_enabled = "key_state_variant" in self.policy_metadata
-        self.key_state_schema = self._get_key_state_schema(self.policy_metadata)
+        self.robot_dim = 14
+        self.state_dim = 14
+        self.key_state_task = None
+        self.key_state_schema = []
+        self.key_state_config_path = self.checkpoint_run_dir / KEY_STATE_CONFIG_RELATIVE_PATH
+        self.key_state_enabled = self.key_state_config_path.exists()
+        if self.key_state_enabled:
+            self._load_key_state_config(self.key_state_config_path)
+        elif self._requires_key_state_metadata():
+            raise FileNotFoundError(
+                f"Missing key-state metadata for checkpoint {self.checkpoint_run_dir}: "
+                f"{self.key_state_config_path}"
+            )
+
         self.policy = _policy_config.create_trained_policy(
             config,
-            f"policy/pi05/checkpoints/{self.train_config_name}/{self.model_name}/{self.checkpoint_id}",
+            str(self.checkpoint_dir),
             robotwin_repo_id=assets_id,
             )
         print("loading model success!")
@@ -83,26 +84,69 @@ class PI0:
         print(f"successfully set instruction:{instruction}")
 
     def reset_key_state(self):
-        self.key_state = np.zeros(8, dtype=np.float32)
-        self.key_state[0] = 1.0
-        self.key_state[3] = 1.0
+        if not self.key_state_enabled:
+            self.key_state = None
+            return
 
-    @staticmethod
-    def _get_key_state_schema(policy_metadata):
-        schema = policy_metadata.get("key_state_schema")
+        self.key_state = np.zeros(self.state_dim, dtype=np.float32)
+        for entry in self.key_state_schema:
+            start, end = entry["dim"]
+            labels = entry["labels"]
+            init_index = 0
+            if entry["kind"] == "attribute" and "unknown" in labels:
+                init_index = labels.index("unknown")
+            self.key_state[start:end] = 0.0
+            self.key_state[start + init_index] = 1.0
+
+    def _requires_key_state_metadata(self):
+        values = [
+            self.train_config_name,
+            self.model_name,
+            self.policy_metadata.get("key_state_variant"),
+            self.policy_metadata.get("key_state_schema"),
+        ]
+        return any("key_state" in str(value) for value in values if value)
+
+    def _load_key_state_config(self, path):
+        with path.open("r", encoding="utf-8") as f:
+            payload = yaml.safe_load(f) or {}
+        config = payload.get("config", payload)
+        layout = config.get("state_layout", {})
+        self.state_dim = int(layout.get("state_dim", 32))
+        self.robot_dim = int(layout.get("robot_dim", 14))
+        self.key_state_task = (config.get("dataset") or {}).get("task")
+
+        schema = []
+        phase = config.get("phase")
+        if phase:
+            schema.append(self._normalize_key_state_entry("phase", phase, "phase"))
+        for attr in config.get("attributes", []):
+            schema.append(self._normalize_key_state_entry(attr.get("name", "attribute"), attr, "attribute"))
+
         if not schema:
-            return DEFAULT_KEY_STATE_SCHEMA
-        normalized = []
-        for item in schema:
-            labels = item.get("labels", [])
-            size = int(item.get("size", len(labels)))
-            normalized.append({
-                "name": item.get("name", "key_state"),
-                "size": size,
-                "labels": labels,
-                "update_rule": item.get("update_rule", {"type": "raw"}),
-            })
-        return normalized
+            raise ValueError(f"No phase or attributes found in key-state config: {path}")
+        self.key_state_schema = schema
+
+    def _normalize_key_state_entry(self, name, raw_entry, kind):
+        dim = raw_entry.get("dim")
+        if not isinstance(dim, list) or len(dim) != 2:
+            raise ValueError(f"Invalid key-state dim for {name}: {dim}")
+        start, end = int(dim[0]), int(dim[1])
+        if start < self.robot_dim or end <= start or end > self.state_dim:
+            raise ValueError(
+                f"Invalid key-state dim for {name}: {dim}, "
+                f"robot_dim={self.robot_dim}, state_dim={self.state_dim}"
+            )
+        labels = list(raw_entry.get("labels", []))
+        size = end - start
+        if len(labels) != size:
+            raise ValueError(f"Label count mismatch for {name}: dim={dim}, labels={labels}")
+        return {
+            "name": str(name),
+            "kind": kind,
+            "dim": (start, end),
+            "labels": labels,
+        }
 
     @staticmethod
     def _one_hot_from_logits(logits):
@@ -117,50 +161,49 @@ class PI0:
         if self.key_state_update_mode == "schema_latch":
             self._update_key_state_from_schema(action)
             return
-        self.key_state[:3] = self._one_hot_from_logits(action[KEY_STATE_PHASE_SLICE])
-        self.key_state[3:8] = self._one_hot_from_logits(action[KEY_STATE_MAT_SLICE])
+        for entry in self.key_state_schema:
+            start, end = entry["dim"]
+            if action.shape[0] < end:
+                raise ValueError(f"Action dim {action.shape[0]} is too small for key-state dim {start}:{end}")
+            self.key_state[start:end] = self._one_hot_from_logits(action[start:end])
 
     def _update_key_state_from_schema(self, action):
-        offset = 0
         for entry in self.key_state_schema:
-            size = int(entry["size"])
-            action_slice = action[KEY_STATE_ACTION_OFFSET + offset:KEY_STATE_ACTION_OFFSET + offset + size]
-            state_slice = self.key_state[offset:offset + size]
+            start, end = entry["dim"]
+            if action.shape[0] < end:
+                raise ValueError(f"Action dim {action.shape[0]} is too small for key-state dim {start}:{end}")
+            action_slice = action[start:end]
+            state_slice = self.key_state[start:end]
             if action_slice.size == 0 or state_slice.size == 0:
-                offset += size
                 continue
 
             pred = int(np.argmax(action_slice))
             current = int(np.argmax(state_slice))
-            rule = entry.get("update_rule", {"type": "raw"})
-            rule_type = rule.get("type", "raw")
 
-            if rule_type == "monotonic":
-                max_step = int(rule.get("max_step", 1))
+            if entry["kind"] == "phase":
+                max_step = 1
                 next_value = min(max(current, pred), current + max_step)
-            elif rule_type == "latch_once_nonzero":
-                unknown_index = int(rule.get("unknown_index", 0))
-                next_value = pred if current == unknown_index and pred != unknown_index else current
-            elif rule_type == "raw":
-                next_value = pred
             else:
-                raise ValueError(f"Unsupported key-state update rule: {rule_type}")
+                labels = entry["labels"]
+                unknown_index = labels.index("unknown") if "unknown" in labels else None
+                if unknown_index is not None:
+                    next_value = pred if current == unknown_index and pred != unknown_index else current
+                else:
+                    next_value = pred
 
-            self.key_state[offset:offset + size] = 0.0
-            self.key_state[offset + next_value] = 1.0
-            offset += size
+            self.key_state[start:end] = 0.0
+            self.key_state[start + next_value] = 1.0
 
     def get_eval_video_overlay(self):
         if not self.key_state_enabled:
             return None
         items = [
-            {"label": "variant", "value": self._display_variant_name()},
+            {"label": "task", "value": self.key_state_task or self.model_name},
             {"label": "update", "value": self.key_state_update_mode},
         ]
-        offset = 0
         for entry in self.key_state_schema:
-            size = int(entry["size"])
-            values = self.key_state[offset:offset + size]
+            start, end = entry["dim"]
+            values = self.key_state[start:end]
             if values.size == 0:
                 continue
             index = int(np.argmax(values))
@@ -170,7 +213,6 @@ class PI0:
             else:
                 value = str(index)
             items.append({"label": entry["name"], "value": value})
-            offset += size
         return {"title": "key-state", "items": items}
 
     def _display_variant_name(self):
@@ -180,15 +222,17 @@ class PI0:
         return self.model_name
 
     def action_for_env(self, action):
-        return np.asarray(action, dtype=np.float32)[:14]
+        return np.asarray(action, dtype=np.float32)[:self.robot_dim]
 
     def _state_for_policy(self, state):
         state = np.asarray(state, dtype=np.float32)
         if not self.key_state_enabled:
             return state
-        policy_state = np.zeros(32, dtype=np.float32)
-        policy_state[:14] = state[:14]
-        policy_state[14:22] = self.key_state
+        policy_state = np.zeros(self.state_dim, dtype=np.float32)
+        policy_state[:self.robot_dim] = state[:self.robot_dim]
+        for entry in self.key_state_schema:
+            start, end = entry["dim"]
+            policy_state[start:end] = self.key_state[start:end]
         return policy_state
 
     # Update the observation window buffer

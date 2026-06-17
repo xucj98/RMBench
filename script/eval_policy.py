@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import shutil
 
 sys.path.append("./")
 sys.path.append(f"./policy")
@@ -19,6 +20,7 @@ import importlib
 import argparse
 import pdb
 import shlex
+import logging
 
 from generate_episode_instructions import *
 
@@ -39,7 +41,14 @@ def get_git_commit():
 
 
 def get_runtime_env():
-    keys = ["CUDA_VISIBLE_DEVICES", "SAPIEN_RENDER_DEVICE", "PYTHONPATH"]
+    keys = [
+        "CUDA_VISIBLE_DEVICES",
+        "SAPIEN_RENDER_DEVICE",
+        "PYTHONPATH",
+        "WANDB_PROJECT",
+        "WANDB_RUN_GROUP",
+        "WANDB_MODE",
+    ]
     return {key: os.environ.get(key) for key in keys if os.environ.get(key) is not None}
 
 
@@ -60,6 +69,247 @@ def resolve_eval_save_dir(usr_args, task_name, policy_name, task_config, ckpt_se
     if eval_output_dir:
         return Path(str(eval_output_dir))
     return Path(f"eval_result/{task_name}/{policy_name}/{task_config}/{ckpt_setting}/{current_time}")
+
+
+def requires_key_state_metadata(usr_args):
+    train_config_name = str(usr_args.get("train_config_name", ""))
+    model_name = str(usr_args.get("model_name", ""))
+    return "key_state" in train_config_name or "key_state" in model_name
+
+
+def resolve_checkpoint_paths(usr_args):
+    train_config_name = usr_args.get("train_config_name")
+    model_name = usr_args.get("model_name")
+    checkpoint_id = usr_args.get("checkpoint_id")
+    if not train_config_name or not model_name or checkpoint_id is None:
+        return {}
+
+    checkpoint_dir = (
+        Path("policy/pi05/checkpoints")
+        / str(train_config_name)
+        / str(model_name)
+        / str(checkpoint_id)
+    )
+    checkpoint_run_dir = checkpoint_dir.parent
+    checkpoint_metadata_dir = checkpoint_run_dir / "metadata"
+    key_state_config = checkpoint_metadata_dir / "rmbench_data_meta" / "key_state_config.yaml"
+    return {
+        "checkpoint_dir": checkpoint_dir,
+        "checkpoint_run_dir": checkpoint_run_dir,
+        "checkpoint_metadata_source": checkpoint_metadata_dir,
+        "key_state_config_source": key_state_config,
+    }
+
+
+def copy_checkpoint_metadata(save_dir, usr_args):
+    paths = resolve_checkpoint_paths(usr_args)
+    if not paths:
+        return {}
+
+    requires_key_state = requires_key_state_metadata(usr_args)
+    metadata_source = paths["checkpoint_metadata_source"]
+    key_state_config = paths["key_state_config_source"]
+
+    info = {
+        "checkpoint_dir": paths["checkpoint_dir"],
+        "checkpoint_run_dir": paths["checkpoint_run_dir"],
+        "checkpoint_metadata_source": metadata_source,
+        "checkpoint_metadata_dir": None,
+        "copied": False,
+    }
+
+    if not metadata_source.exists():
+        if requires_key_state:
+            raise FileNotFoundError(f"Missing checkpoint metadata for key-state checkpoint: {metadata_source}")
+        return info
+
+    if requires_key_state and not key_state_config.exists():
+        raise FileNotFoundError(f"Missing key-state config for key-state checkpoint: {key_state_config}")
+
+    target = save_dir / "checkpoint_metadata"
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(metadata_source, target)
+
+    info["checkpoint_metadata_dir"] = target
+    info["copied"] = True
+    return info
+
+
+def load_yaml_file(path):
+    path = Path(path)
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def load_key_state_config_for_wandb(path):
+    payload = load_yaml_file(path)
+    if isinstance(payload, dict) and "config" in payload:
+        return payload["config"]
+    return payload
+
+
+def infer_wandb_group(save_dir):
+    parts = Path(save_dir).parts
+    if len(parts) >= 2 and parts[0] == "eval_result":
+        return parts[1]
+    return None
+
+
+def default_wandb_name(usr_args, current_time):
+    timestamp = current_time.replace(" ", "_").replace(":", "-")
+    task = usr_args.get("task_name", "unknown_task")
+    model = usr_args.get("model_name") or usr_args.get("ckpt_setting") or usr_args.get("policy_name", "policy")
+    return f"eval_{task}_{model}_{timestamp}"
+
+
+def build_wandb_config(save_dir, usr_args, task_args):
+    metadata_dir = Path(save_dir) / "checkpoint_metadata"
+    rmbench_meta_dir = metadata_dir / "rmbench_data_meta"
+    return to_yaml_safe({
+        "eval": {
+            "task_name": usr_args.get("task_name"),
+            "task_config": usr_args.get("task_config"),
+            "policy_name": usr_args.get("policy_name"),
+            "model_name": usr_args.get("model_name"),
+            "train_config_name": usr_args.get("train_config_name"),
+            "checkpoint_id": usr_args.get("checkpoint_id"),
+            "ckpt_setting": usr_args.get("ckpt_setting"),
+            "instruction_type": usr_args.get("instruction_type"),
+            "seed": usr_args.get("seed"),
+            "test_num": usr_args.get("test_num", 100),
+            "eval_video_log": usr_args.get("eval_video_log", True),
+            "eval_video_count": usr_args.get("eval_video_count", 5),
+            "eval_video_key_state_overlay": usr_args.get("eval_video_key_state_overlay", False),
+            "eval_output_dir": str(save_dir),
+        },
+        "runtime": usr_args.get("_runtime", {}),
+        "task_args": task_args,
+        "checkpoint_metadata": {
+            "train_config": load_yaml_file(metadata_dir / "train_config.yaml"),
+            "key_state_config": load_key_state_config_for_wandb(rmbench_meta_dir / "key_state_config.yaml"),
+            "source_data_config": load_yaml_file(rmbench_meta_dir / "source_data_config.yaml"),
+        },
+    })
+
+
+def init_eval_wandb(save_dir, current_time, usr_args, task_args):
+    if not coerce_bool(usr_args.get("wandb_enabled", True)):
+        return None
+
+    import wandb
+
+    project = (
+        usr_args.get("wandb_project")
+        or os.environ.get("WANDB_PROJECT")
+        or "RMBench"
+    )
+    group = (
+        usr_args.get("wandb_group")
+        or os.environ.get("WANDB_RUN_GROUP")
+        or infer_wandb_group(save_dir)
+    )
+    name = usr_args.get("wandb_name") or default_wandb_name(usr_args, current_time)
+    job_type = usr_args.get("wandb_job_type", "eval")
+
+    run = wandb.init(
+        project=project,
+        group=group,
+        name=name,
+        job_type=job_type,
+        config=build_wandb_config(save_dir, usr_args, task_args),
+        dir=str(save_dir),
+    )
+    if wandb.run is not None:
+        wandb_id_path = Path(save_dir) / "wandb_id.txt"
+        wandb_id_path.write_text(wandb.run.id, encoding="utf-8")
+        wandb_run_dir = Path(wandb.run.dir).parent if wandb.run.dir else None
+        usr_args.setdefault("_runtime", {})["wandb"] = {
+            "project": project,
+            "group": group,
+            "name": name,
+            "job_type": job_type,
+            "id": wandb.run.id,
+            "url": wandb.run.url,
+            "local_dir": wandb_run_dir,
+        }
+        wandb.config.update(
+            {"runtime": to_yaml_safe(usr_args.get("_runtime", {}))},
+            allow_val_change=True,
+        )
+    return run
+
+
+def iter_eval_files_for_wandb(save_dir):
+    save_dir = Path(save_dir)
+    root_files = [
+        "_result.txt",
+        "eval_log.txt",
+        "stdout.log",
+        "config.yaml",
+        "command.txt",
+        "wandb_id.txt",
+    ]
+    for name in root_files:
+        path = save_dir / name
+        if path.exists():
+            yield path
+
+    metadata_dir = save_dir / "checkpoint_metadata"
+    if metadata_dir.exists():
+        for path in sorted(metadata_dir.rglob("*")):
+            relative_path = path.relative_to(save_dir).as_posix()
+            if relative_path == "checkpoint_metadata/rmbench_data_meta/key_state_config.yaml":
+                continue
+            if path.is_file():
+                yield path
+
+
+def upload_eval_to_wandb(save_dir, metrics):
+    try:
+        import wandb
+    except ImportError:
+        return
+    if wandb.run is None:
+        return
+
+    wandb.log(metrics)
+    wandb.run.summary.update(metrics)
+
+    save_dir = Path(save_dir)
+    save_base_path = save_dir.parent
+    for path in iter_eval_files_for_wandb(save_dir):
+        try:
+            wandb.save(str(path), base_path=str(save_base_path), policy="now")
+        except Exception as exc:
+            logging.warning("Failed to save %s to wandb: %s", path, exc)
+
+    videos = sorted(save_dir.glob("episode*.mp4"))
+    if videos:
+        wandb.log({
+            "eval/rollout_videos": [
+                wandb.Video(str(path), fps=10, format="mp4")
+                for path in videos
+            ]
+        })
+
+
+def update_wandb_eval_run_config(save_dir):
+    try:
+        import wandb
+    except ImportError:
+        return
+    if wandb.run is None:
+        return
+
+    eval_config = load_yaml_file(Path(save_dir) / "config.yaml")
+    if eval_config is not None:
+        wandb.config.update(
+            {"eval_run_config": to_yaml_safe(eval_config)},
+            allow_val_change=True,
+        )
 
 
 def write_eval_run_files(save_dir, current_time, usr_args, task_args):
@@ -236,7 +486,13 @@ def main(usr_args):
     else:
         args.pop("eval_video_save_dir", None)
 
+    checkpoint_metadata = copy_checkpoint_metadata(save_dir, usr_args)
+    if checkpoint_metadata:
+        usr_args.setdefault("_runtime", {})["checkpoint"] = checkpoint_metadata
+
+    wandb_run = init_eval_wandb(save_dir, current_time, usr_args, args)
     write_eval_run_files(save_dir, current_time, usr_args, args)
+    update_wandb_eval_run_config(save_dir)
 
     # output camera config
     print("============= Config =============\n")
@@ -301,6 +557,16 @@ def main(usr_args):
                 file.write(f"Reward: {r}\n")
 
     print(f"Data has been saved to {file_path}")
+    metrics = {
+        "eval/success_rate": float(success_rates[0]),
+        "eval/success_count": int(suc_num),
+        "eval/test_num": int(test_num),
+        "eval/reward": float(rewards if np.isscalar(rewards) else np.asarray(rewards).reshape(-1)[0]),
+    }
+    upload_eval_to_wandb(save_dir, metrics)
+    if wandb_run is not None:
+        import wandb
+        wandb.finish()
     # return task_reward
 
 def eval_policy(task_name,
@@ -473,8 +739,8 @@ def parse_args_and_config():
             key = pairs[i].lstrip("--")
             value = pairs[i + 1]
             try:
-                value = eval(value)
-            except:
+                value = yaml.safe_load(value)
+            except yaml.YAMLError:
                 pass
             override_dict[key] = value
         return override_dict
