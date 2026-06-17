@@ -1,0 +1,69 @@
+# RMBench Experiments Index
+
+Markdown 标准表格和 GitHub Flavored Markdown 都不支持真正的单元格合并。
+这里统一用普通 Markdown 表格：一行表示一个 train/eval 组合；同一个
+`exp group`、`exp name` 或 checkpoint 对应多个 eval 条件时，重复填写对应单元格。
+
+本表只维护正式实验和正在运行的正式实验；smoke、启动测试和早期调试结果不进入总表。
+路径为仓库相对路径。完整命令、commit 和环境快照以 checkpoint / eval result 目录内的
+metadata、`command.txt`、`config.yaml` 以及 W&B 记录为准。
+
+| exp group | exp name | success rate | train state | eval state | ckpt path | eval result path |
+| --- | --- | ---: | --- | --- | --- | --- |
+| `dp_reproduction` | `observe_and_pickup` | 2/100 = 2% | finished | finished | `policy/DP/checkpoints/observe_and_pickup-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/observe_and_pickup` |
+| `dp_reproduction` | `put_back_block` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/put_back_block-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/put_back_block` |
+| `dp_reproduction` | `rearrange_blocks` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/rearrange_blocks-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/rearrange_blocks` |
+| `dp_reproduction` | `swap_T` | 11/100 = 11% | finished | finished | `policy/DP/checkpoints/swap_T-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/swap_T` |
+| `dp_reproduction` | `swap_blocks` | 15/100 = 15% | finished | finished | `policy/DP/checkpoints/swap_blocks-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/swap_blocks` |
+| `dp_reproduction` | `cover_blocks` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/cover_blocks-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/cover_blocks` |
+| `dp_reproduction` | `battery_try` | 13/100 = 13% | finished | finished | `policy/DP/checkpoints/battery_try-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/battery_try` |
+| `dp_reproduction` | `press_button` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/press_button-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/press_button` |
+| `dp_reproduction` | `blocks_ranking_try` | 3/100 = 3% | finished | finished | `policy/DP/checkpoints/blocks_ranking_try-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/blocks_ranking_try` |
+|  |  |  |  |  |  |  |
+| `pi0_lora_baseline` | `swap_blocks` | 16/100 = 16% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/swap_blocks/30000` | `eval_result/pi0_lora_baseline/swap_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `pi0_lora_baseline` | `swap_T` | 13/100 = 13% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/swap_T/30000` | `eval_result/pi0_lora_baseline/swap_T_raw_100_video5_20260614_pi0_baseline_100` |
+| `pi0_lora_baseline` | `put_back_block` | 7/100 = 7% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/put_back_block/30000` | `eval_result/pi0_lora_baseline/put_back_block_raw_100_video5_20260614_pi0_baseline_100` |
+| `pi0_lora_baseline` | `observe_and_pickup` | 4/100 = 4% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/observe_and_pickup/30000` | `eval_result/pi0_lora_baseline/observe_and_pickup_raw_100_video5_20260614_pi0_baseline_100` |
+| `pi0_lora_baseline` | `rearrange_blocks` | 1/100 = 1% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/rearrange_blocks/30000` | `eval_result/pi0_lora_baseline/rearrange_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `pi0_lora_baseline` | `cover_blocks` | 1/100 = 1% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/cover_blocks/30000` | `eval_result/pi0_lora_baseline/cover_blocks_raw_100_video5_20260614_pi0_baseline_100` |
+| `pi0_lora_baseline` | `battery_try` | 8/100 = 8% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/battery_try/30000` | `eval_result/pi0_lora_baseline/battery_try_raw_100_video5_20260614_pi0_baseline_100` |
+| `pi0_lora_baseline` | `press_button` | 3/100 = 3% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/press_button/30000` | `eval_result/pi0_lora_baseline/press_button_raw_100_video5_20260614_pi0_baseline_100` |
+| `pi0_lora_baseline` | `blocks_ranking_try` | 16/100 = 16% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/blocks_ranking_try/30000` | `eval_result/pi0_lora_baseline/blocks_ranking_try_raw_100_video5_20260614_pi0_baseline_100` |
+|  |  |  |  |  |  |  |
+| `pi0_key_state_baseline` | `put_back_block@ckpt30000` | 55/100 = 55% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_lora/pi0_put_back_block_key_state_default/30000` | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_raw_100rollout_video5/2026-06-10 22:41:07` |
+| `pi0_key_state_baseline` | `rearrange_blocks@ckpt20000` | 15/100 = 15% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_rearrange_blocks/20000` | `eval_result/pi0_key_state_baseline/rearrange_blocks_ckpt20000` |
+| `pi0_key_state_baseline` | `rearrange_blocks@ckpt30000` | 3/100 = 3% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_rearrange_blocks/30000` | `eval_result/pi0_key_state_baseline/rearrange_blocks` |
+| `pi0_key_state_baseline` | `swap_blocks@ckpt20000` | 40/100 = 40% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_swap_blocks/20000` | `eval_result/pi0_key_state_baseline/swap_blocks_ckpt20000` |
+| `pi0_key_state_baseline` | `swap_blocks@ckpt30000` | 44/100 = 44% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_swap_blocks/30000` | `eval_result/pi0_key_state_baseline/swap_blocks` |
+| `pi0_key_state_baseline` | `battery_try@ckpt20000` | 10/100 = 10% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_battery_try/20000` | `eval_result/pi0_key_state_baseline/battery_try_ckpt20000` |
+| `pi0_key_state_baseline` | `battery_try@ckpt30000` | 15/100 = 15% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_battery_try/30000` | `eval_result/pi0_key_state_baseline/battery_try` |
+| `pi0_key_state_baseline` | `battery_try@ckpt30000_pi0step20` | 14/100 = 14% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_battery_try/30000` | `eval_result/pi0_key_state_baseline/battery_try_ckpt30000_pi0step20` |
+| `pi0_key_state_baseline` | `cover_blocks@ckpt20000` | 0/100 = 0% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_cover_blocks/20000` | `eval_result/pi0_key_state_baseline/cover_blocks_ckpt20000` |
+| `pi0_key_state_baseline` | `cover_blocks@ckpt30000` | 0/100 = 0% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_cover_blocks/30000` | `eval_result/pi0_key_state_baseline/cover_blocks` |
+|  |  |  |  |  |  |  |
+| `put_back_block_key_state_ablation` | `default@50rollout_raw` | 27/50 = 54% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_lora/pi0_put_back_block_key_state_default/30000` | `eval_result/put_back_block_key_state_ablation/default_raw_50_video2_20260611_214744` |
+| `put_back_block_key_state_ablation` | `mat_hash_p50` | 21/50 = 42% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_mat_hash_p50_lora/pi0_put_back_block_key_state_mat_hash_p50/30000` | `eval_result/put_back_block_key_state_ablation/mat_hash_p50_raw_50_video2_20260611_214744` |
+| `put_back_block_key_state_ablation` | `wmat_margin10` | 19/50 = 38% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_wmat_margin10_lora/pi0_put_back_block_key_state_wmat_margin10/30000` | `eval_result/put_back_block_key_state_ablation/wmat_margin10_raw_50_video2_20260611_214744` |
+| `put_back_block_key_state_ablation` | `phase_jitter5` | 19/50 = 38% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_phase_jitter5_lora/pi0_put_back_block_key_state_phase_jitter5/30000` | `eval_result/put_back_block_key_state_ablation/phase_jitter5_raw_50_video2_20260611_214744` |
+| `put_back_block_key_state_ablation` | `phase_lag10` | 18/50 = 36% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_phase_lag10_lora/pi0_put_back_block_key_state_phase_lag10/30000` | `eval_result/put_back_block_key_state_ablation/phase_lag10_raw_50_video2_20260611_214744` |
+| `put_back_block_key_state_ablation` | `mat_first` | 16/50 = 32% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_mat_first_lora/pi0_put_back_block_key_state_mat_first/30000` | `eval_result/put_back_block_key_state_ablation/mat_first_raw_50_video2_20260611_214744` |
+| `put_back_block_key_state_ablation` | `wmat_margin20` | 15/50 = 30% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_wmat_margin20_lora/pi0_put_back_block_key_state_wmat_margin20/30000` | `eval_result/put_back_block_key_state_ablation/wmat_margin20_raw_50_video2_20260611_214744` |
+| `put_back_block_key_state_ablation` | `phase_lag20` | 9/50 = 18% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_phase_lag20_lora/pi0_put_back_block_key_state_phase_lag20/30000` | `eval_result/put_back_block_key_state_ablation/phase_lag20_raw_50_video2_20260611_214744` |
+| `put_back_block_key_state_ablation` | `default@100rollout_raw` | 55/100 = 55% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_lora/pi0_put_back_block_key_state_default/30000` | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_raw_100rollout_video5/2026-06-10 22:41:07` |
+| `put_back_block_key_state_ablation` | `default@100rollout_schema_latch` | 55/100 = 55% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_lora/pi0_put_back_block_key_state_default/30000` | `eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_schema_latch_100rollout_video5/2026-06-10 22:41:07` |
+| `put_back_block_key_state_ablation` | `default_full_b32` | 68/100 = 68% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_put_back_block_key_state_default_full_b32/pi0_put_back_block_key_state_default_full_b32/30000` | `eval_result/put_back_block_key_state_ablation/default_full_b32_raw_100_video5_20260614_170220` |
+|  |  |  |  |  |  |  |
+| `pi0_full_baseline` | `rearrange_blocks` | 21/100 = 21% | finished | finished | `policy/pi05/checkpoints/pi0_full_baseline/pi0_full_baseline_rearrange_blocks/30000` | `eval_result/pi0_full_baseline/rearrange_blocks` |
+| `pi0_full_baseline` | `battery_try` | 13/100 = 13% | finished | finished | `policy/pi05/checkpoints/pi0_full_baseline/pi0_full_baseline_battery_try/30000` | `eval_result/pi0_full_baseline/battery_try` |
+|  |  |  |  |  |  |  |
+| `pi05_full_baseline` | `rearrange_blocks` | 20/100 = 20% | finished | finished | `policy/pi05/checkpoints/pi05_full_baseline/pi05_full_baseline_rearrange_blocks/20000` | `eval_result/pi05_full_baseline/rearrange_blocks` |
+| `pi05_full_baseline` | `battery_try` | 15/84 = 17.9% partial | finished | running | `policy/pi05/checkpoints/pi05_full_baseline/pi05_full_baseline_battery_try/20000` | `eval_result/pi05_full_baseline/battery_try` |
+|  |  |  |  |  |  |  |
+| `pi05_full_key_state` | `swap_blocks` | - | running | todo | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks` | - |
+| `pi05_full_key_state` | `battery_try` | - | running | todo | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try` | - |
+|  |  |  |  |  |  |  |
+| `pi0_key_state_encoding_ablation` | `cover_blocks_label_id` | - | running | todo | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_cover_blocks_label_id` | - |
+| `pi0_key_state_encoding_ablation` | `battery_try_micro_stage_label_id` | - | running | todo | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_battery_try_micro_stage_label_id` | - |
+|  |  |  |  |  |  |  |
+| `cover_blocks_key_state_design` | `exec2_attr3_no_phase` | - | running | todo | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/cover_blocks_key_state_design_exec2_attr3_no_phase` | - |
+| `cover_blocks_key_state_design` | `phase_exec2_attr3` | - | running | todo | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/cover_blocks_key_state_design_phase_exec2_attr3` | - |
