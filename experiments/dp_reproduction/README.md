@@ -68,7 +68,7 @@ policy/DP/checkpoints/<task>-demo_clean-50-0/
 评测产物：
 
 ```text
-eval_result/<task>/DP/demo_clean/default/<timestamp>/
+eval_result/dp_reproduction/<task>/
 ```
 
 wandb：
@@ -87,15 +87,15 @@ historical DP run name pattern: DP_<task>
 
 | Task | Eval result | Success | Paper DP | Source |
 | --- | ---: | ---: | ---: | --- |
-| `observe_and_pickup` | 2/100 | 2% | 1% | `eval_result/observe_and_pickup/DP/demo_clean/default/2026-05-21 12:55:25/_result.txt` |
-| `put_back_block` | 0/100 | 0% | 0% | `eval_result/put_back_block/DP/demo_clean/default/2026-05-21 12:55:25/_result.txt` |
-| `rearrange_blocks` | 0/100 | 0% | 0% | `eval_result/rearrange_blocks/DP/demo_clean/default/2026-05-18 22:02:28/_result.txt` |
-| `swap_T` | 11/100 | 11% | 20% | `eval_result/swap_T/DP/demo_clean/default/2026-05-18 22:02:27/_result.txt` |
-| `swap_blocks` | 15/100 | 15% | 11% | `eval_result/swap_blocks/DP/demo_clean/default/2026-05-18 22:02:24/_result.txt` |
-| `cover_blocks` | 0/100 | 0% | 0% | `eval_result/cover_blocks/DP/demo_clean/default/2026-05-18 22:02:22/_result.txt` |
-| `battery_try` | 13/100 | 13% | 10% | `eval_result/battery_try/DP/demo_clean/default/2026-05-21 12:55:24/_result.txt` |
-| `press_button` | 0/100 | 0% | 0% | `eval_result/press_button/DP/demo_clean/default/2026-05-18 22:02:27/_result.txt` |
-| `blocks_ranking_try` | 3/100 | 3% | 10% | `eval_result/blocks_ranking_try/DP/demo_clean/default/2026-05-21 12:55:25/_result.txt` |
+| `observe_and_pickup` | 2/100 | 2% | 1% | `eval_result/dp_reproduction/observe_and_pickup/_result.txt` |
+| `put_back_block` | 0/100 | 0% | 0% | `eval_result/dp_reproduction/put_back_block/_result.txt` |
+| `rearrange_blocks` | 0/100 | 0% | 0% | `eval_result/dp_reproduction/rearrange_blocks/_result.txt` |
+| `swap_T` | 11/100 | 11% | 20% | `eval_result/dp_reproduction/swap_T/_result.txt` |
+| `swap_blocks` | 15/100 | 15% | 11% | `eval_result/dp_reproduction/swap_blocks/_result.txt` |
+| `cover_blocks` | 0/100 | 0% | 0% | `eval_result/dp_reproduction/cover_blocks/_result.txt` |
+| `battery_try` | 13/100 | 13% | 10% | `eval_result/dp_reproduction/battery_try/_result.txt` |
+| `press_button` | 0/100 | 0% | 0% | `eval_result/dp_reproduction/press_button/_result.txt` |
+| `blocks_ranking_try` | 3/100 | 3% | 10% | `eval_result/dp_reproduction/blocks_ranking_try/_result.txt` |
 
 平均成功率：
 
