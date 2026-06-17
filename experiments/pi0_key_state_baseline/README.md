@@ -136,3 +136,33 @@ policy/pi05/assets/pi0_aloha_key_state_lora/cover_blocks_demo_clean_state_key_st
 swap_blocks:  prompt token length 55 > max length 48, tokenizer 截断。
 cover_blocks: prompt token length 52 > max length 48, tokenizer 截断。
 ```
+
+## 评测
+
+评测统一使用 `pi0_aloha_key_state_lora` 下的 `30000` checkpoint，
+每个任务 100 rollout，前 5 个 rollout 记录 key-state overlay 视频。
+W&B group 使用 `pi0_key_state_baseline`，job type 为 `eval`。
+
+当前正式评测状态：
+
+```text
+rearrange_blocks: running, GPU1, eval_result=eval_result/pi0_key_state_baseline/rearrange_blocks, wandb=u38tm3nc
+swap_blocks:      running, GPU2, eval_result=eval_result/pi0_key_state_baseline/swap_blocks,      wandb=98yxdx0j
+battery_try:      running, GPU3, eval_result=eval_result/pi0_key_state_baseline/battery_try,      wandb=4z4bbu06
+cover_blocks:     running, GPU4, eval_result=eval_result/pi0_key_state_baseline/cover_blocks,     wandb=yt60mn8h
+```
+
+20000 checkpoint 正式评测状态：
+
+```text
+rearrange_blocks: running, GPU0, eval_result=eval_result/pi0_key_state_baseline/rearrange_blocks_ckpt20000, wandb=s56ngtgf
+swap_blocks:      running, GPU1, eval_result=eval_result/pi0_key_state_baseline/swap_blocks_ckpt20000,      wandb=p539w874
+battery_try:      running, GPU2, eval_result=eval_result/pi0_key_state_baseline/battery_try_ckpt20000,      wandb=lh3z31r0
+cover_blocks:     running, GPU3, eval_result=eval_result/pi0_key_state_baseline/cover_blocks_ckpt20000,     wandb=3l3zfm7e
+```
+
+30000 checkpoint action-horizon 对照评测状态：
+
+```text
+battery_try: running, GPU5, pi0_step=20, eval_result=eval_result/pi0_key_state_baseline/battery_try_ckpt30000_pi0step20, wandb=dks50nni
+```
