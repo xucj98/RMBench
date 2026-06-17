@@ -64,7 +64,7 @@ phase_exec2_attr3:
 
 ```text
 smoke conversion: passed
-formal conversion: pending
+formal conversion: passed
 ```
 
 smoke conversion 验收：
@@ -88,6 +88,30 @@ phase_exec2_attr3:
   padding dim 20:32 zero
 ```
 
+formal conversion 验收：
+
+```text
+exec2_attr3_no_phase:
+  repo_id=cover_blocks_demo_clean_state_key_state_exec2_attr3_no_phase
+  episodes=50, frames=995-1054, total_frames=50904
+  state/action=32
+  operation/slot/open_slot_0/1/2 label_id values valid
+  uncover slot labels match task_facts.open_order_positions
+  open_slot_0/1/2 latch after acquisition window
+  padding dim 19:32 zero
+  meta/rmbench 四个复现文件齐全
+
+phase_exec2_attr3:
+  repo_id=cover_blocks_demo_clean_state_key_state_phase_exec2_attr3
+  episodes=50, frames=995-1054, total_frames=50904
+  state/action=32
+  phase/operation/slot/open_slot_0/1/2 label_id values valid
+  uncover slot labels match task_facts.open_order_positions
+  open_slot_0/1/2 latch after acquisition window
+  padding dim 20:32 zero
+  meta/rmbench 四个复现文件齐全
+```
+
 ## 训练
 
 训练复用现有配置：
@@ -107,14 +131,22 @@ policy/pi05/assets/pi0_aloha_key_state_lora/cover_blocks_demo_clean_state_key_st
 
 ```text
 exec2_attr3_no_phase:
-  status=pending
+  status=running
   repo_id=cover_blocks_demo_clean_state_key_state_exec2_attr3_no_phase
   exp_name=cover_blocks_key_state_design_exec2_attr3_no_phase
+  gpu=3
+  checkpoint=policy/pi05/checkpoints/pi0_aloha_key_state_lora/cover_blocks_key_state_design_exec2_attr3_no_phase
+  stdout=logs/cover_blocks_key_state_design/train_exec2_attr3_no_phase_gpu3.log
+  wandb=xtwaal6k
 
 phase_exec2_attr3:
-  status=pending
+  status=running
   repo_id=cover_blocks_demo_clean_state_key_state_phase_exec2_attr3
   exp_name=cover_blocks_key_state_design_phase_exec2_attr3
+  gpu=5
+  checkpoint=policy/pi05/checkpoints/pi0_aloha_key_state_lora/cover_blocks_key_state_design_phase_exec2_attr3
+  stdout=logs/cover_blocks_key_state_design/train_phase_exec2_attr3_gpu5.log
+  wandb=7l2as0ip
 ```
 
 W&B project 使用 `RMBench`，group 使用 `cover_blocks_key_state_design`。
