@@ -9,6 +9,8 @@ battery_try
 cover_blocks
 ```
 
+`put_back_block` 的结果来自 `put_back_block_key_state_ablation`。
+
 ## 数据生成
 
 正式数据使用 `task_config/demo_clean_state.yml`，输出目录为：
@@ -114,12 +116,12 @@ logs/pi0_key_state_baseline/
 
 当前正式训练状态：
 
-```text
-battery_try:      running, GPU0, exp_name=pi0_key_state_baseline_battery_try,      wandb=llxfe4ne
-rearrange_blocks: running, GPU1, exp_name=pi0_key_state_baseline_rearrange_blocks, wandb=8wz0kr5q
-swap_blocks:      running, GPU2, exp_name=pi0_key_state_baseline_swap_blocks,      wandb=5i2sl3mh
-cover_blocks:     running, GPU3, exp_name=pi0_key_state_baseline_cover_blocks,     wandb=2ih7m18m
-```
+| Task | Status | Checkpoint | wandb |
+| --- | --- | --- | --- |
+| `rearrange_blocks` | completed, 30000 steps | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_rearrange_blocks` | `8wz0kr5q` |
+| `swap_blocks` | completed, 30000 steps | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_swap_blocks` | `5i2sl3mh` |
+| `battery_try` | completed, 30000 steps | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_battery_try` | `llxfe4ne` |
+| `cover_blocks` | completed, 30000 steps | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_baseline_cover_blocks` | `2ih7m18m` |
 
 已完成的 norm stats：
 
@@ -139,30 +141,34 @@ cover_blocks: prompt token length 52 > max length 48, tokenizer 截断。
 
 ## 评测
 
-评测统一使用 `pi0_aloha_key_state_lora` 下的 `30000` checkpoint，
-每个任务 100 rollout，前 5 个 rollout 记录 key-state overlay 视频。
+评测均已完成。每个任务 100 rollout，前 5 个 rollout 记录 key-state overlay 视频。
 W&B group 使用 `pi0_key_state_baseline`，job type 为 `eval`。
 
-当前正式评测状态：
+| Task | pi0_lora_baseline | pi0_lora_key_state 20000 | pi0_lora_key_state 30000 | pi0_full_key_state | Paper Mem-0 | Paper Pi0.5 | ckpt30000_pi0step20 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `rearrange_blocks` | 1/100 = 1% | 15/100 = 15% | 3/100 = 3% | - | 89% | 13% | - |
+| `put_back_block` | 7/100 = 7% | - | 55/100 = 55% | 68/100 = 68% | 90% | 11% | - |
+| `swap_blocks` | 16/100 = 16% | 40/100 = 40% | 44/100 = 44% | - | 67% | 24% | - |
+| `battery_try` | 8/100 = 8% | 10/100 = 10% | 15/100 = 15% | - | 28% | 16% | 14/100 = 14% |
+| `cover_blocks` | 1/100 = 1% | 0/100 = 0% | 0/100 = 0% | - | 68% | 0% | - |
+
+key-state eval result：
 
 ```text
-rearrange_blocks: running, GPU1, eval_result=eval_result/pi0_key_state_baseline/rearrange_blocks, wandb=u38tm3nc
-swap_blocks:      running, GPU2, eval_result=eval_result/pi0_key_state_baseline/swap_blocks,      wandb=98yxdx0j
-battery_try:      running, GPU3, eval_result=eval_result/pi0_key_state_baseline/battery_try,      wandb=4z4bbu06
-cover_blocks:     running, GPU4, eval_result=eval_result/pi0_key_state_baseline/cover_blocks,     wandb=yt60mn8h
+rearrange_blocks 30000: eval_result/pi0_key_state_baseline/rearrange_blocks, wandb=u38tm3nc
+swap_blocks      30000: eval_result/pi0_key_state_baseline/swap_blocks,      wandb=98yxdx0j
+battery_try      30000: eval_result/pi0_key_state_baseline/battery_try,      wandb=4z4bbu06
+cover_blocks     30000: eval_result/pi0_key_state_baseline/cover_blocks,     wandb=yt60mn8h
+put_back_block   30000: eval_result/put_back_block/pi05/demo_clean_eval/pi0_put_back_block_key_state_default_mem_statefix_raw_100rollout_video5/2026-06-10 22:41:07
+put_back_block   full:  eval_result/put_back_block_key_state_ablation/default_full_b32_raw_100_video5_20260614_170220
+
+rearrange_blocks 20000: eval_result/pi0_key_state_baseline/rearrange_blocks_ckpt20000, wandb=s56ngtgf
+swap_blocks      20000: eval_result/pi0_key_state_baseline/swap_blocks_ckpt20000,      wandb=p539w874
+battery_try      20000: eval_result/pi0_key_state_baseline/battery_try_ckpt20000,      wandb=lh3z31r0
+cover_blocks     20000: eval_result/pi0_key_state_baseline/cover_blocks_ckpt20000,     wandb=3l3zfm7e
+
+battery_try 30000 pi0_step=20:
+eval_result/pi0_key_state_baseline/battery_try_ckpt30000_pi0step20, wandb=dks50nni
 ```
 
-20000 checkpoint 正式评测状态：
-
-```text
-rearrange_blocks: running, GPU0, eval_result=eval_result/pi0_key_state_baseline/rearrange_blocks_ckpt20000, wandb=s56ngtgf
-swap_blocks:      running, GPU1, eval_result=eval_result/pi0_key_state_baseline/swap_blocks_ckpt20000,      wandb=p539w874
-battery_try:      running, GPU2, eval_result=eval_result/pi0_key_state_baseline/battery_try_ckpt20000,      wandb=lh3z31r0
-cover_blocks:     running, GPU3, eval_result=eval_result/pi0_key_state_baseline/cover_blocks_ckpt20000,     wandb=3l3zfm7e
-```
-
-30000 checkpoint action-horizon 对照评测状态：
-
-```text
-battery_try: running, GPU5, pi0_step=20, eval_result=eval_result/pi0_key_state_baseline/battery_try_ckpt30000_pi0step20, wandb=dks50nni
-```
+论文 Mem-0 / Pi0.5 数值来自 `PROGRESS.md` 中记录的 RMBench Table 1。
