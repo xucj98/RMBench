@@ -621,6 +621,16 @@ def _robotwin_aloha_key_state_data(repo_id: str) -> LeRobotAlohaKeyStateDataConf
     )
 
 
+def _robotwin_aloha_pi05_key_state_data(repo_id: str) -> LeRobotAlohaKeyStateDataConfig:
+    return LeRobotAlohaKeyStateDataConfig(
+        repo_id=repo_id,
+        repack_transforms=_ROBOTWIN_ALOHA_REPACK,
+        base_config=DataConfig(
+            prompt_from_task=True,
+        ),
+    )
+
+
 def _pi0_robotwin_lora_baseline_config() -> TrainConfig:
     model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
     return TrainConfig(
@@ -655,6 +665,18 @@ def _pi05_robotwin_full_baseline_config() -> TrainConfig:
         name="pi05_full_baseline",
         model=pi0_config.Pi0Config(pi05=True),
         data=_robotwin_aloha_pi05_data("fake"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=20_000,
+        batch_size=32,
+        fsdp_devices=1,
+    )
+
+
+def _pi05_robotwin_key_state_full_config() -> TrainConfig:
+    return TrainConfig(
+        name="full_key_state",
+        model=pi0_config.Pi0Config(pi05=True),
+        data=_robotwin_aloha_pi05_key_state_data("fake"),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
         num_train_steps=20_000,
         batch_size=32,
@@ -766,6 +788,7 @@ _CONFIGS = [
     ),
     _pi0_robotwin_full_baseline_config(),
     _pi05_robotwin_full_baseline_config(),
+    _pi05_robotwin_key_state_full_config(),
     _pi0_robotwin_lora_baseline_config(),
     _pi0_robotwin_key_state_baseline_lora_config(),
     _pi0_robotwin_key_state_lora_config(

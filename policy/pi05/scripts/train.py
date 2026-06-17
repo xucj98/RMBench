@@ -178,7 +178,7 @@ def _write_train_run_metadata(config: _config.TrainConfig) -> None:
                 target = target_meta_dir / name
                 shutil.copy2(source, target)
                 paths_to_upload.append(target)
-        elif config.name == "pi0_aloha_key_state_lora":
+        elif "key_state" in config.name:
             raise FileNotFoundError(f"Missing RMBench dataset metadata directory: {source_meta_dir}")
 
     if config.wandb_enabled and wandb.run is not None:
