@@ -51,10 +51,10 @@ policy/pi05/checkpoints/full_key_state/<exp_name>
 
 正式训练状态：
 
-| Task | Repo ID | GPU | Status | Checkpoint | stdout |
-| --- | --- | ---: | --- | --- | --- |
-| `swap_blocks` | `swap_blocks_demo_clean_state_key_state` | 0 | running | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_swap_blocks.stdout.log` |
-| `battery_try` | `battery_try_demo_clean_state_key_state` | 7 | running | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try` | `policy/pi05/logs/full_key_state/pi05_full_key_state_battery_try.stdout.log` |
+| Task | Repo ID | GPU | Status | wandb id | Checkpoint | stdout |
+| --- | --- | ---: | --- | --- | --- | --- |
+| `swap_blocks` | `swap_blocks_demo_clean_state_key_state` | 0 | running | `65ldopff` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_swap_blocks.stdout.log` |
+| `battery_try` | `battery_try_demo_clean_state_key_state` | 7 | running | `2mueiwio` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try` | `policy/pi05/logs/full_key_state/pi05_full_key_state_battery_try.stdout.log` |
 
 训练命令、git commit、cwd、环境变量和 resolved train config 由 checkpoint metadata
 自动记录；README 不重复手写这些字段。
