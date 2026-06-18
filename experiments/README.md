@@ -1,5 +1,25 @@
 # RMBench Experiments Index
 
+## 任务级主表
+
+空白表示当前没有正式评测结果。除特别说明外，复现结果均采用 100-rollout eval；
+`pi0_lora_key_state` 使用默认 30k checkpoint 结果。论文 DP / Mem-0 / Pi0.5
+来自 `PROGRESS.md` 记录的 RMBench Table 1。
+
+| Task | Paper DP | Paper Mem-0 | Paper Pi0.5 | Repro DP | Repro Mem-0 | pi0_lora | pi0_full | pi05_full | pi0_lora_key_state | pi0_full_key_state | pi05_full_key_state |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `observe_and_pickup` | 1% | 4% | 9% | 2% | 4% | 4% |  |  |  |  |  |
+| `rearrange_blocks` | 0% | 89% | 13% | 0% | 0% | 1% | 21% | 20% | 3% |  |  |
+| `put_back_block` | 0% | 90% | 11% | 0% |  | 7% |  |  | 55% | 68% |  |
+| `swap_blocks` | 11% | 67% | 24% | 15% |  | 16% |  | 14% | 44% |  | running |
+| `swap_T` | 20% | 14% | 15% | 11% |  | 13% |  |  |  |  |  |
+| `battery_try` | 10% | 28% | 16% | 13% |  | 8% | 13% | 17% | 15% |  | running |
+| `blocks_ranking_try` | 10% | 18% | 6% | 3% |  | 16% |  |  |  |  |  |
+| `cover_blocks` | 0% | 68% | 0% | 0% |  | 1% |  |  | 0% |  |  |
+| `press_button` | 0% | 0% | 0% | 0% |  | 3% |  |  |  |  |  |
+
+## 实验索引
+
 Markdown 标准表格和 GitHub Flavored Markdown 都不支持真正的单元格合并。
 这里统一用普通 Markdown 表格：一行表示一个 train/eval 组合；同一个
 `exp group`、`exp name` 或 checkpoint 对应多个 eval 条件时，重复填写对应单元格。
@@ -57,8 +77,11 @@ metadata、`command.txt`、`config.yaml` 以及 W&B 记录为准。
 | `pi0_full_baseline` | `battery_try` | 13/100 = 13% | finished | finished | `policy/pi05/checkpoints/pi0_full_baseline/pi0_full_baseline_battery_try/30000` | `eval_result/pi0_full_baseline/battery_try` |
 |  |  |  |  |  |  |  |
 | `pi05_full_baseline` | `rearrange_blocks` | 20/100 = 20% | finished | finished | `policy/pi05/checkpoints/pi05_full_baseline/pi05_full_baseline_rearrange_blocks/20000` | `eval_result/pi05_full_baseline/rearrange_blocks` |
-| `pi05_full_baseline` | `battery_try` | 15/84 = 17.9% partial | finished | running | `policy/pi05/checkpoints/pi05_full_baseline/pi05_full_baseline_battery_try/20000` | `eval_result/pi05_full_baseline/battery_try` |
+| `pi05_full_baseline` | `battery_try` | 17/100 = 17% | finished | finished | `policy/pi05/checkpoints/pi05_full_baseline/pi05_full_baseline_battery_try/20000` | `eval_result/pi05_full_baseline/battery_try` |
 |  |  |  |  |  |  |  |
+| `pi0_full_key_state` | `rearrange_blocks` | - | todo | todo | `policy/pi05/checkpoints/pi0_full_key_state/pi0_full_key_state_rearrange_blocks` | - |
+|  |  |  |  |  |  |  |
+| `pi05_full_key_state` | `rearrange_blocks` | - | todo | todo | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_rearrange_blocks` | - |
 | `pi05_full_key_state` | `swap_blocks` | - | running | todo | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks` | - |
 | `pi05_full_key_state` | `battery_try` | - | running | todo | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try` | - |
 |  |  |  |  |  |  |  |
