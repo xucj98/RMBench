@@ -114,11 +114,13 @@ class PI0:
         phase = config.get("phase")
         if phase:
             schema.append(self._normalize_key_state_entry("phase", phase, "phase"))
+        for execution in config.get("execution", []):
+            schema.append(self._normalize_key_state_entry(execution.get("name", "execution"), execution, "execution"))
         for attr in config.get("attributes", []):
             schema.append(self._normalize_key_state_entry(attr.get("name", "attribute"), attr, "attribute"))
 
         if not schema:
-            raise ValueError(f"No phase or attributes found in key-state config: {path}")
+            raise ValueError(f"No key-state entries found in key-state config: {path}")
         self.key_state_schema = schema
 
     def _normalize_key_state_entry(self, name, raw_entry, kind):
