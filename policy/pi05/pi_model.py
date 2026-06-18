@@ -90,13 +90,7 @@ class PI0:
 
         self.key_state = np.zeros(self.state_dim, dtype=np.float32)
         for entry in self.key_state_schema:
-            start, end = entry["dim"]
-            labels = entry["labels"]
-            init_index = 0
-            if entry["kind"] == "attribute" and "unknown" in labels:
-                init_index = labels.index("unknown")
-            self.key_state[start:end] = 0.0
-            self.key_state[start + init_index] = 1.0
+            self._write_key_state_value(entry, self._initial_key_state_index(entry))
 
     def _requires_key_state_metadata(self):
         values = [
@@ -138,14 +132,22 @@ class PI0:
                 f"robot_dim={self.robot_dim}, state_dim={self.state_dim}"
             )
         labels = list(raw_entry.get("labels", []))
+        if not labels:
+            raise ValueError(f"Missing labels for key-state entry {name}")
+        encoding = str(raw_entry.get("encoding", "one_hot"))
+        if encoding not in {"one_hot", "label_id"}:
+            raise ValueError(f"Unsupported key-state encoding for {name}: {encoding}")
         size = end - start
-        if len(labels) != size:
+        if encoding == "one_hot" and len(labels) != size:
             raise ValueError(f"Label count mismatch for {name}: dim={dim}, labels={labels}")
+        if encoding == "label_id" and size != 1:
+            raise ValueError(f"label_id encoding requires a scalar dim for {name}: dim={dim}")
         return {
             "name": str(name),
             "kind": kind,
             "dim": (start, end),
             "labels": labels,
+            "encoding": encoding,
         }
 
     @staticmethod
@@ -153,6 +155,40 @@ class PI0:
         value = np.zeros_like(logits, dtype=np.float32)
         value[int(np.argmax(logits))] = 1.0
         return value
+
+    @staticmethod
+    def _clip_label_index(index, labels):
+        return int(np.clip(index, 0, len(labels) - 1))
+
+    def _initial_key_state_index(self, entry):
+        labels = entry["labels"]
+        if entry["kind"] == "attribute" and "unknown" in labels:
+            return labels.index("unknown")
+        return 0
+
+    def _decode_key_state_index(self, entry, values):
+        labels = entry["labels"]
+        encoding = entry["encoding"]
+        values = np.asarray(values, dtype=np.float32)
+        if values.size == 0:
+            return self._initial_key_state_index(entry)
+        if encoding == "one_hot":
+            return self._clip_label_index(int(np.argmax(values)), labels)
+        if encoding == "label_id":
+            return self._clip_label_index(int(np.rint(float(values[0]))), labels)
+        raise ValueError(f"Unsupported key-state encoding: {encoding}")
+
+    def _write_key_state_value(self, entry, index):
+        start, end = entry["dim"]
+        index = self._clip_label_index(index, entry["labels"])
+        self.key_state[start:end] = 0.0
+        if entry["encoding"] == "one_hot":
+            self.key_state[start + index] = 1.0
+            return
+        if entry["encoding"] == "label_id":
+            self.key_state[start] = float(index)
+            return
+        raise ValueError(f"Unsupported key-state encoding: {entry['encoding']}")
 
     def update_key_state_from_action(self, action):
         if not self.key_state_enabled:
@@ -165,7 +201,10 @@ class PI0:
             start, end = entry["dim"]
             if action.shape[0] < end:
                 raise ValueError(f"Action dim {action.shape[0]} is too small for key-state dim {start}:{end}")
-            self.key_state[start:end] = self._one_hot_from_logits(action[start:end])
+            if entry["encoding"] == "one_hot":
+                self.key_state[start:end] = self._one_hot_from_logits(action[start:end])
+            else:
+                self._write_key_state_value(entry, self._decode_key_state_index(entry, action[start:end]))
 
     def _update_key_state_from_schema(self, action):
         for entry in self.key_state_schema:
@@ -177,8 +216,8 @@ class PI0:
             if action_slice.size == 0 or state_slice.size == 0:
                 continue
 
-            pred = int(np.argmax(action_slice))
-            current = int(np.argmax(state_slice))
+            pred = self._decode_key_state_index(entry, action_slice)
+            current = self._decode_key_state_index(entry, state_slice)
 
             if entry["kind"] == "phase":
                 max_step = 1
@@ -191,8 +230,7 @@ class PI0:
                 else:
                     next_value = pred
 
-            self.key_state[start:end] = 0.0
-            self.key_state[start + next_value] = 1.0
+            self._write_key_state_value(entry, next_value)
 
     def get_eval_video_overlay(self):
         if not self.key_state_enabled:
@@ -206,7 +244,7 @@ class PI0:
             values = self.key_state[start:end]
             if values.size == 0:
                 continue
-            index = int(np.argmax(values))
+            index = self._decode_key_state_index(entry, values)
             labels = entry.get("labels", [])
             if index < len(labels):
                 value = f"{labels[index]} [{index}]"
