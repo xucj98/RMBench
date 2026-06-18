@@ -11,7 +11,7 @@ docs/general_experiment_guidelines.md
 
 ## 项目结构
 
-RMBench 是 benchmark 环境和多个 policy 子项目的组合仓库，不是单一 Python package。
+RMBench 是 benchmark 环境和多个 policy 子项目的组合仓库。
 
 当前主要结构：
 
@@ -19,26 +19,16 @@ RMBench 是 benchmark 环境和多个 policy 子项目的组合仓库，不是�
 envs/          仿真环境和任务
 description/   instruction 和任务描述
 script/        项目级辅助脚本
-policy/        各类 policy 子项目，部分来自上游开源库
+policy/        各类 policy 子项目，来自上游开源库
 task_config/   任务配置
 docs/          文档
 ```
-
-修改上游 policy 子项目时，应顺应其原有结构。例如 pi05/openpi 的核心逻辑仍放在：
-
-```text
-policy/pi05/src/openpi/
-```
-
-不要为了 RMBench 的目录偏好重构上游 package。
 
 ## Git 与提交语言
 
 RMBench 当前默认使用中文 commit message，优先服务于本项目主要开发者的回看、审阅和实验溯源。
 
-如果 commit 面向上游开源库、英文 issue/PR、英文协作者，或需要进入外部社区，则使用英文。
-
-Commit message 结构仍遵循通用代码规范；只是语言默认使用中文。
+Commit message 结构需遵循通用代码规范。
 
 ## 共享存储和软链接
 
@@ -47,21 +37,16 @@ RMBench 当前不重构 repo-facing 软链接。现有共享数据、checkpoint 
 ```text
 assets/...
 data/<task>
-policy/<policy_name>/checkpoints
+policy/pi05/checkpoints
 eval_result
 ```
 
 这些路径在本机可能是指向 `/mnt/public/xcj/rmbench` 或 `/mnt/public3/xcj/rmbench` 的软链接。`/mnt/public` 本身是 `/mnt/public3` 的软链接，因此两种写法访问的是同一块共享盘。
 
-迁移到另一台机器时，优先按当前软链接清单重建这些 repo-facing 入口，而不是移动大文件或重新设计目录结构。代码、配置和实验脚本应引用 repo 相对路径，不应写死 `/mnt/public...` 绝对路径。
+代码、配置和实验脚本应引用 repo 相对路径，不应写死 `/mnt/public...` 绝对路径。
 
-当前软链接清单可以用下面的命令导出：
 
-```bash
-find . -maxdepth 4 -type l -printf '%p -> %l\n' | sort
-```
-
-当前这些软链接是 workspace 状态，不进入 git。后续如需自动化部署，可增加一个小的初始化/检查脚本来重建软链接；脚本可以进 git，但不要把机器私有的绝对软链接本身提交成项目规范。
+当前这些软链接是 workspace 状态，不进入 git。后续如需自动化部署，可增加一个小的初始化/检查脚本来重建软链接；脚本可以进 git，但不要把机器私有的绝对软链接进行git commit。
 
 ## 结果目录
 
@@ -77,7 +62,33 @@ eval_result/
 
 训练日志、训练配置、wandb id 等训练相关文件应放在对应 checkpoint 目录下。eval 日志、eval 配置和 result summary 应放在对应 eval_result 目录下。
 
-不要额外创建长期 `runs/` 结果目录。临时 pid、queue state 或启动日志如果需要保存，应放在对应训练或评测结果目录中，或者放在 ignored 的临时目录中。
+不要额外创建结果或者日志目录。临时 pid、queue state 或启动日志如果需要保存，应放在对应训练或评测结果目录中。
+
+### 长任务启动和日志
+
+正式训练或正式评测通常是长任务。使用 `setsid bash -lc ... &`，不要使用 `nohup ... &`。当前环境中 `nohup` 曾出现返回 PID 后进程立即消失、日志为空的情况；`setsid` 会新建 session，更适合脱离当前工具会话继续运行。
+
+标准手动训练启动模板如下，命令应从 workspace 根目录执行：
+
+```bash
+run_dir="policy/pi05/checkpoints/<train_config_name>"
+mkdir -p "$run_dir"
+setsid bash -lc 'cd policy/pi05 && env CUDA_VISIBLE_DEVICES=<gpu> XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 PYTHONPATH=src .venv/bin/python scripts/train.py <train_config_name> --exp-name=<exp_name> ...' \
+  > "$run_dir/<exp_name>.stdout.log" 2>&1 &
+echo $! > "$run_dir/<exp_name>.pid"
+```
+
+标准手动评测启动模板如下：
+
+```bash
+run_dir="eval_result/<batch_id>/<run_id>"
+mkdir -p "$run_dir"
+setsid bash -lc 'env CUDA_VISIBLE_DEVICES=<gpu> ... python script/eval_policy.py ...' \
+  > "$run_dir/stdout.log" 2>&1 &
+echo $! > "$run_dir/pid"
+```
+
+`stdout.log` 是该 run 的 stdout/stderr；`pid` 用于查询进程是否仍在运行。Python 批量启动脚本可以使用 `subprocess.Popen(..., stdout=log, stderr=subprocess.STDOUT, start_new_session=True)`，语义上等价于手动 `setsid`。它同样应把 per-run `stdout.log` 和 `pid` 写到对应 checkpoint 或 eval_result run 目录；跨多个 run 的队列调度日志才可以放在 batch 目录下。
 
 ### pi05 checkpoint 命名
 
@@ -97,13 +108,11 @@ policy/pi05/checkpoints/<train_config_name>/<exp_name>/<step>
   表示该配置下的一个具体 run，例如 task、variant、seed 或补跑编号。
 ```
 
-同一批实验如果只是 task、seed、batch size、GPU、学习率小范围覆盖或运行名不同，应优先复用同一个 `train_config_name`，通过 CLI override 或批量启动脚本传入 `repo_id`、`exp_name`、`batch_size` 等运行参数。这里的 `repo_id` 指 LeRobot 数据集名或数据集引用，不是代码仓库。不要为每个 task 都新增一个 config，导致目录退化为：
+同一批实验如果只是 task、seed、batch size、GPU、学习率小范围覆盖或运行名不同，应优先复用同一个 `train_config_name`，通过 CLI override 或批量启动脚本传入 `repo_id`、`exp_name`、`batch_size` 等运行参数。这里的 `repo_id` 指 LeRobot 数据集名或数据集引用。不要为每个 task 都新增一个 config，导致目录退化为：
 
 ```text
 checkpoints/<task_config>/<task_exp>/...
 ```
-
-这种写法会让第一层和第二层重复表达同一个 run，浪费 openpi 已经提供的两层结构。
 
 只有模型结构、policy 行为、数据 transform、state/action schema、归一化规则或默认数据语义发生变化时，才应新增 `train_config_name`。例如 LoRA 与 full finetune 可以是不同 config；同一 full finetune 只是 batch size 从 8 改到 32，不应新建 config。
 
@@ -133,12 +142,6 @@ repo_id 变化，即换了 LeRobot 数据集。
 eval_result/<batch_id>/<run_id>/
 ```
 
-不要默认使用旧脚本的环境视角层级作为新实验主结构：
-
-```text
-eval_result/<task_name>/<policy_name>/<task_config>/<ckpt_setting>/<timestamp>/
-```
-
 每个 eval run 目录应聚合同一次评测的结果、日志、配置和视频：
 
 ```text
@@ -152,7 +155,7 @@ eval_result/<batch_id>/<run_id>/
   ...
 ```
 
-`_result.txt` 保存最终指标；`eval_log.txt` 保存 episode 级结果；`stdout.log` 保存该次 eval 进程的 stdout/stderr；`command.txt` 保存启动命令、当前 commit 和关键环境变量；`config.yaml` 保存 deploy config、CLI overrides、task config 和脚本解析后的最终有效配置快照。单次 eval 的 stdout/stderr 是 per-run 日志，应和该 run 的结果放在同一目录，不要另放到 `_launch_logs/`。
+`_result.txt` 保存最终指标；`eval_log.txt` 保存 episode 级结果；`stdout.log` 保存该次 eval 进程的 stdout/stderr；`command.txt` 保存启动命令、当前 commit 和关键环境变量；`config.yaml` 保存 deploy config、CLI overrides、task config 和脚本解析后的最终有效配置快照。
 
 只有跨多个 run 的队列调度日志才属于 batch 级日志，例如启动了哪些 run、分配到哪些 GPU、进程何时结束。此类日志可以放在 batch 目录下：
 
@@ -160,7 +163,6 @@ eval_result/<batch_id>/<run_id>/
 eval_result/<batch_id>/_queue.log
 ```
 
-也可以放在 ignored 的临时运行目录中。它不应替代 per-run 的 `stdout.log`。
 
 ## 实验入口
 
@@ -177,11 +179,10 @@ experiments/<batch_id>/
 2. 批次级说明：这批实验在验证什么、怎么跑、产物在哪里查。
 ```
 
-这些文件应进入 git 管理，包括 README、命令脚本、job manifest、配置 override 和结果摘要。`experiments/` 不保存 checkpoint、dataset、视频、大规模日志或本地 wandb 运行目录。
+这些文件应进入 git 管理，包括 README、命令脚本、配置 override 和结果摘要。`experiments/` 不保存 checkpoint、dataset、视频、大规模日志或本地 wandb 运行目录。
 
 policy 子项目中可以保留基础训练脚本、模型库代码和数据转换工具，但不要把“一键启动一组 RMBench 实验”的入口放在某个 policy 子目录里。
 
-注意：repo 内的 `experiments/` 是实验入口目录，不是实验结果目录；不需要为它创建共享盘结果目录。
 
 推荐结构：
 
@@ -191,7 +192,7 @@ experiments/<batch_id>/
   run.py / commands/ / configs/ / jobs/   # 可选，按实验需要
 ```
 
-`README.md` 是核心。批量运行代码可以放在 `run.py` 或 `commands/*.sh` 中；配置 override 和 job manifest 可以放在 `configs/` 或 `jobs/` 中。目录名不强制，关键是入口可发现、命令可复现、结果可追溯。
+`README.md` 是核心。批量运行代码可以放在 `run.py` 或 `commands/*.sh` 中；新增的配置可以放在 `configs/` 中。
 
 RMBench 使用 batch / run 两层语义：
 
@@ -202,18 +203,6 @@ batch:
 run:
   一个具体实验，通常是某个 policy、task、seed 和配置的一次训练及对应评测。
 ```
-
-已有历史 checkpoint 和 eval_result 不需要为了实验入口而搬迁。README 直接说明当前 repo 相对路径或目录规则，例如：
-
-```text
-policy/DP/checkpoints/...
-policy/pi05/checkpoints/...
-eval_result/<task>/<policy>/...
-```
-
-未来新实验也可以继续沿用 policy 子项目自己的 checkpoint 目录和现有 eval_result 落点。关键是每个正式实验的 checkpoint 目录、eval_result 目录和 wandb config/summary 里能追溯 `batch_id`、run name、commit、训练命令、评测命令、checkpoint 引用、eval_result 引用、wandb id 和最终指标。
-
-当前 RMBench 的训练和评测入口通常是分离的：训练脚本负责 checkpoint 和训练 wandb，`script/eval_policy.py` 负责写 `eval_result/...`。因此不要假设所有 policy 都支持训练进程内部自动 eval。更稳妥的做法是由 `experiments/<batch_id>/` 下的入口或外层 runner 串联 train job 和 eval job，并把 train/eval 的互相引用写入产物 metadata 和 wandb。
 
 README 至少写清楚：
 
@@ -228,11 +217,9 @@ wandb project 和 group
 最终结果摘要或结果表位置
 ```
 
-smoke、启动测试、单 episode 调试、video-count 测试和未完成评测不进入正式结果汇总；如需保留，只能作为排查记录或 notes，不能混入正式复现表。
+smoke、启动测试不进入正式结果汇总。
 
 ## wandb
-
-RMBench 正式训练默认上传 wandb，作为跨机器统一查询和对比入口。正式评测应优先上传 wandb 或由 runner 同步摘要；如果当前入口不支持，就必须在 eval_result metadata 或 README 结果摘要中记录 eval_result 路径和最终指标。
 
 上传 wandb 时统一使用：
 
@@ -243,24 +230,6 @@ job_type: train 或 eval
 name: <run_name>
 ```
 
-wandb 记录 config、指标、结果摘要和 repo 相对路径引用；不上传完整 checkpoint、dataset 或大规模视频。建议至少记录：
-
-```text
-batch_id
-run_name
-task
-policy
-commit
-训练/eval 命令
-checkpoint_ref
-eval_result_ref
-success_count / test_num / success_rate
-```
-
-如果 train 和 eval 能共用同一个 wandb run，优先共用一个 `wandb_id`，这样网页上直接能查到训练曲线和最终 eval 指标。当前 `script/eval_policy.py` 默认不初始化 wandb，只写本地 `eval_result`；因此现阶段至少要在 eval_result metadata 或 README 结果摘要里记录训练 `wandb_id`、eval_result 路径和 success rate，后续可以再补一个 eval wandb job 或让 runner 把评测摘要同步到 wandb。
-
-`experiments/` 是批次说明和启动入口，wandb 是查询和对比视图。具体实验的事实记录以 checkpoint metadata、eval_result metadata 和 wandb 为准；wandb 未上传或上传不完整时，正式结果仍应能从本地产物定位和复核。
-
 ## GPU 与渲染
 
 除非用户特别说明，否则训练和评估不得占用 GPU0。
@@ -270,5 +239,3 @@ SAPIEN 渲染设备可通过环境变量指定：
 ```text
 SAPIEN_RENDER_DEVICE=cuda:0
 ```
-
-GPU 或 host 信息如果出现在日志或 wandb config 中会更方便排查，但不是必须单独设计结果目录。

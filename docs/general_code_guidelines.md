@@ -47,7 +47,7 @@
 
 ## 命令执行约定
 
-文档、commit message、实验记录和 review 摘要中的命令，默认都应从 workspace 根目录执行。
+文档、commit message、实验记录中的命令，默认都应从 workspace 根目录执行。
 
 如果命令必须在其他目录运行，应在命令开头显式切换目录，例如：
 
@@ -55,7 +55,7 @@
 cd policy/pi05 && CUDA_VISIBLE_DEVICES=1 python scripts/train.py ...
 ```
 
-不要写依赖当前 shell 所在目录的隐式命令。这样另一个开发者或自动化系统复制命令时，不需要猜测工作目录。
+这样另一个开发者复制命令时，不需要猜测工作目录。
 
 ## 依赖管理
 
@@ -122,11 +122,11 @@ Changes:
 - 具体改动 2
 ```
 
-Bugfix、兼容性修复或 regression fix 类提交需要额外提供 `Evidence`，写清楚能复现问题的命令、修复前现象和修复后现象。理想情况下，同一环境中 checkout 到修复前会复现 bug，checkout 到修复后 bug 消失。
+Bugfix、兼容性修复或 regression fix 类提交需要额外提供 `Evidence`，写清楚能复现问题的命令、修复前现象和修复后现象。理想情况下，同一环境中 git checkout 到修复前会复现 bug，checkout 到修复后 bug 消失。
 
-非 fix 类提交不需要写 `Evidence`。普通功能、数据链路、实验入口、文档和 ignore 规则提交只保留 `Motivation` 和 `Changes`；验证命令可以放在最终汇报、review note 或 CI/test log 中。
+非 fix 类提交不需要写 `Evidence`。普通功能、数据链路、实验入口等提交只保留 `Motivation` 和 `Changes` 中。
 
-Commit message 的详细程度应和改动复杂度匹配。小型文档、README、ignore 或格式整理提交可以只写清楚 subject，必要时加一句简短 motivation；不需要为了模板完整而写长段说明。普通功能提交再使用简洁的 `Motivation` 和 `Changes`，复杂修复提交才需要更完整的上下文。
+小型文档、README、ignore 或格式整理提交可以只写清楚 subject，不需要 `Motivation` 和 `Changes`。
 
 多行 commit message 必须使用 `-F`，不要使用 `-m` 拼接多行正文，也不要在 shell 普通引号中写字面量 `\n`。`-m` 只用于单行 subject。
 
@@ -159,7 +159,7 @@ git show --stat --oneline --format=fuller HEAD
 git status --short
 ```
 
-如果检查发现 commit message 格式错误，但该 commit 尚未用于正式实验、训练或对外共享，可以用 `git commit --amend` 修正。若已经用于正式实验或被他人依赖，应优先保留 commit id，并在后续说明中记录格式问题。
+如果检查发现 commit message 格式错误，但该 commit 尚未用于正式实验、训练或对外共享，可以用 `git commit --amend` 修正。若已经用于正式实验或被他人依赖，应优先保留 commit id。
 
 示例：
 
