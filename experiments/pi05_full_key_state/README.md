@@ -56,7 +56,7 @@ policy/pi05/checkpoints/full_key_state/<exp_name>
 
 | Task | Repo ID | GPU | Status | wandb id | Checkpoint | stdout |
 | --- | --- | ---: | --- | --- | --- | --- |
-| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | 6 | todo | pending | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_rearrange_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_rearrange_blocks.stdout.log` |
+| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | 6 | running | `pdsniduh` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_rearrange_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_rearrange_blocks.stdout.log` |
 | `swap_blocks` | `swap_blocks_demo_clean_state_key_state` | 0 | running | `65ldopff` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_swap_blocks.stdout.log` |
 | `battery_try` | `battery_try_demo_clean_state_key_state` | 7 | running | `2mueiwio` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try` | `policy/pi05/logs/full_key_state/pi05_full_key_state_battery_try.stdout.log` |
 

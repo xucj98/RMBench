@@ -50,7 +50,7 @@ policy/pi05/checkpoints/pi0_full_key_state/<exp_name>
 
 | Task | Repo ID | GPU | Status | wandb id | Checkpoint | stdout |
 | --- | --- | ---: | --- | --- | --- | --- |
-| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | 4 | todo | pending | `policy/pi05/checkpoints/pi0_full_key_state/pi0_full_key_state_rearrange_blocks` | `policy/pi05/logs/pi0_full_key_state/pi0_full_key_state_rearrange_blocks.stdout.log` |
+| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | 4 | running | `sza9j7fr` | `policy/pi05/checkpoints/pi0_full_key_state/pi0_full_key_state_rearrange_blocks` | `policy/pi05/logs/pi0_full_key_state/pi0_full_key_state_rearrange_blocks.stdout.log` |
 
 训练命令、git commit、cwd、环境变量和 resolved train config 由 checkpoint metadata
 自动记录；README 不重复手写这些字段。
