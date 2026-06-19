@@ -533,6 +533,8 @@ class TrainConfig:
     log_interval: int = 100
     # How often (in steps) to save checkpoints.
     save_interval: int = 10000
+    # Maximum number of recent checkpoints to keep.
+    checkpoint_max_to_keep: int = 2
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
     keep_period: int | None = None
 
@@ -674,11 +676,12 @@ def _pi05_robotwin_full_baseline_config() -> TrainConfig:
 
 def _pi05_robotwin_key_state_full_config() -> TrainConfig:
     return TrainConfig(
-        name="full_key_state",
+        name="pi05_full_key_state",
         model=pi0_config.Pi0Config(pi05=True),
         data=_robotwin_aloha_pi05_key_state_data("fake"),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        num_train_steps=30_000,
+        num_train_steps=40_000,
+        checkpoint_max_to_keep=3,
         batch_size=32,
         fsdp_devices=1,
     )
