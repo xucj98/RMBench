@@ -2,6 +2,7 @@
 set -euo pipefail
 
 configs=(
+  put_back_block
   rearrange_blocks
   swap_blocks
   battery_try

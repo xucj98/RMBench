@@ -1,0 +1,32 @@
+dataset:
+  task: put_back_block
+  source_dir: data/put_back_block/demo_clean_state
+  repo_id: put_back_block_demo_clean_state_key_state
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+phase:
+  dim: [14, 17]
+  labels:
+    - move_block_to_center
+    - press_button
+    - move_block_back_to_origin_mat
+  ranges:
+    - label: move_block_to_center
+      window: [episode_start, micro_stages.center_place.end_frame]
+    - label: press_button
+      window: [micro_stages.center_place.end_frame, micro_stages.button_return.end_frame]
+    - label: move_block_back_to_origin_mat
+      window: [micro_stages.button_return.end_frame, episode_end]
+
+attributes:
+  - name: origin_mat
+    dim: [17, 22]
+    labels: [unknown, left, right, front, back]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.origin_mat_name
+        update_window: [episode_start, micro_stages.center_pick.end_frame]

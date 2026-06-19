@@ -84,7 +84,7 @@ class put_back_block(Base_Task):
             "q": self._vec_to_list(pose.q),
         }
 
-    def _build_episode_info(self):
+    def _build_task_facts(self):
         mat_names = ['left', 'right', 'front', 'back']
         return {
             "origin_mat_id": int(mat_names.index(self.mat_name)),
@@ -98,34 +98,56 @@ class put_back_block(Base_Task):
                 for name, mat in zip(mat_names, self.mat_lst)
             },
             "button_pose": self._pose_to_dict(self.button.get_pose()),
-            "phase_sequence": [
+        }
+    
+    def play_once(self):
+        task_facts = self._build_task_facts()
+        start = self._key_state_stage_start()
+        self.move(self.grasp_actor(self.block,arm_tag="right",pre_grasp_dis=0.1, grasp_dis=0.02), language_annotation=f'Pick up the block and move it to the center position.')
+        self._record_key_state_micro_stage("center_pick", start)
+        start = self._key_state_stage_start()
+        self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Pick up the block and move it to the center position.')
+        self._record_key_state_micro_stage("center_lift", start)
+        start = self._key_state_stage_start()
+        self.move(self.place_actor(self.block, arm_tag="right", target_pose=self.center_pose, functional_point_id=2, dis=0.02), language_annotation=f'Pick up the block and move it to the center position.')
+        self._record_key_state_micro_stage("center_place", start)
+        self.check_block_in_center()
+        self.press_button()
+        start = self._key_state_stage_start()
+        self.move(self.back_to_origin(arm_tag="left"), language_annotation=f'Press the button.')
+        self._record_key_state_micro_stage("button_return", start)
+        start = self._key_state_stage_start()
+        self.move(self.grasp_actor(self.block,arm_tag="right",pre_grasp_dis=0.02, grasp_dis=0.02), language_annotation=f'Move the block back to the {self.mat_name} mat.')
+        self._record_key_state_micro_stage("origin_pick", start)
+        start = self._key_state_stage_start()
+        self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Move the block back to the {self.mat_name} mat.')
+        self._record_key_state_micro_stage("origin_lift", start)
+        start = self._key_state_stage_start()
+        self.move(self.place_actor(self.block, arm_tag="right", target_pose=self.target_pose, functional_point_id=2, dis=0.01), language_annotation=f'Move the block back to the {self.mat_name} mat.')
+        self._record_key_state_micro_stage("origin_place", start)
+        task_facts["final_block_pose"] = self._pose_to_dict(self.block.get_pose())
+        self._set_key_state_scene_info(
+            task_facts=task_facts,
+            phase_sequence=[
                 "move_block_to_center",
                 "press_button",
                 "move_block_back_to_origin_mat",
             ],
-        }
-    
-    def play_once(self):
-        episode_info = self._build_episode_info()
-        self.move(self.grasp_actor(self.block,arm_tag="right",pre_grasp_dis=0.1, grasp_dis=0.02), language_annotation=f'Pick up the block and move it to the center position.')
-        self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Pick up the block and move it to the center position.')
-        self.move(self.place_actor(self.block, arm_tag="right", target_pose=self.center_pose, functional_point_id=2, dis=0.02), language_annotation=f'Pick up the block and move it to the center position.')
-        self.check_block_in_center()
-        self.press_button()
-        self.move(self.back_to_origin(arm_tag="left"), language_annotation=f'Press the button.')
-        self.move(self.grasp_actor(self.block,arm_tag="right",pre_grasp_dis=0.02, grasp_dis=0.02), language_annotation=f'Move the block back to the {self.mat_name} mat.')
-        self.move(self.move_by_displacement(arm_tag="right", z=0.1), language_annotation=f'Move the block back to the {self.mat_name} mat.')
-        self.move(self.place_actor(self.block, arm_tag="right", target_pose=self.target_pose, functional_point_id=2, dis=0.01), language_annotation=f'Move the block back to the {self.mat_name} mat.')
-        episode_info["final_block_pose"] = self._pose_to_dict(self.block.get_pose())
-        self.info["info"] = episode_info
+        )
         return self.info
         
     def press_button(self):
+        start = self._key_state_stage_start()
         self.move(self.grasp_actor(self.button, arm_tag="left", pre_grasp_dis=0.08, grasp_dis=0.08, contact_point_id=0), language_annotation=f'Press the button.')
+        self._record_key_state_micro_stage("button_approach", start)
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag="left", z=-0.04), language_annotation=f'Press the button.')
+        self._record_key_state_micro_stage("button_press", start)
         self.update_press_success()
         self.check_success()
+        start = self._key_state_stage_start()
         self.move(self.move_by_displacement(arm_tag="left", z=0.04), language_annotation=f'Press the button.')
+        self._record_key_state_micro_stage("button_release", start)
         self.set_button_unpressed(self.button)
         self.update_button_reset(self.button)
     
