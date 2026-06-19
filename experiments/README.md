@@ -9,11 +9,11 @@
 | Task | Paper DP | Paper Mem-0 | Paper Pi0.5 | Repro DP | Repro Mem-0 | pi0_lora | pi0_full | pi05_full | pi0_lora_key_state | pi0_full_key_state | pi05_full_key_state |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `observe_and_pickup` | 1% | 4% | 9% | 2% | 4% | 4% |  |  |  |  |  |
-| `rearrange_blocks` | 0% | 89% | 13% | 0% | 0% | 1% | 21% | 20% | 3% | running | running |
+| `rearrange_blocks` | 0% | 89% | 13% | 0% | 0% | 1% | 21% | 20% | 3% | eval todo | running |
 | `put_back_block` | 0% | 90% | 11% | 0% |  | 7% |  |  | 55% | 68% |  |
-| `swap_blocks` | 11% | 67% | 24% | 15% |  | 16% |  | 14% | 44% |  | running |
+| `swap_blocks` | 11% | 67% | 24% | 15% |  | 16% |  | 14% | 44% |  | 85% |
 | `swap_T` | 20% | 14% | 15% | 11% |  | 13% |  |  |  |  |  |
-| `battery_try` | 10% | 28% | 16% | 13% |  | 8% | 13% | 17% | 15% |  | running |
+| `battery_try` | 10% | 28% | 16% | 13% |  | 8% | 13% | 17% | 15% |  | 29% |
 | `blocks_ranking_try` | 10% | 18% | 6% | 3% |  | 16% |  |  |  |  |  |
 | `cover_blocks` | 0% | 68% | 0% | 0% |  | 1% |  |  | 0% |  |  |
 | `press_button` | 0% | 0% | 0% | 0% |  | 3% |  |  |  |  |  |
@@ -79,14 +79,14 @@ metadata、`command.txt`、`config.yaml` 以及 W&B 记录为准。
 | `pi05_full_baseline` | `rearrange_blocks` | 20/100 = 20% | finished | finished | `policy/pi05/checkpoints/pi05_full_baseline/pi05_full_baseline_rearrange_blocks/20000` | `eval_result/pi05_full_baseline/rearrange_blocks` |
 | `pi05_full_baseline` | `battery_try` | 17/100 = 17% | finished | finished | `policy/pi05/checkpoints/pi05_full_baseline/pi05_full_baseline_battery_try/20000` | `eval_result/pi05_full_baseline/battery_try` |
 |  |  |  |  |  |  |  |
-| `pi0_full_key_state` | `rearrange_blocks` | - | running | todo | `policy/pi05/checkpoints/pi0_full_key_state/pi0_full_key_state_rearrange_blocks` | - |
+| `pi0_full_key_state` | `rearrange_blocks` | - | finished | todo | `policy/pi05/checkpoints/pi0_full_key_state/pi0_full_key_state_rearrange_blocks/30000` | - |
 |  |  |  |  |  |  |  |
 | `pi05_full_key_state` | `rearrange_blocks` | - | running | todo | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_rearrange_blocks` | - |
-| `pi05_full_key_state` | `swap_blocks` | - | running | todo | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks` | - |
-| `pi05_full_key_state` | `battery_try` | - | running | todo | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try` | - |
+| `pi05_full_key_state` | `swap_blocks` | 85/100 = 85% | finished | finished | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks/20000` | `eval_result/pi05_full_key_state/swap_blocks` |
+| `pi05_full_key_state` | `battery_try` | 29/100 = 29% | finished | finished | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try/20000` | `eval_result/pi05_full_key_state/battery_try` |
 |  |  |  |  |  |  |  |
-| `pi0_key_state_encoding_ablation` | `cover_blocks_label_id` | - | running | todo | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_cover_blocks_label_id` | - |
-| `pi0_key_state_encoding_ablation` | `battery_try_micro_stage_label_id` | - | running | todo | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_battery_try_micro_stage_label_id` | - |
+| `pi0_key_state_encoding_ablation` | `cover_blocks_label_id` | 0/100 = 0% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_cover_blocks_label_id/30000` | `eval_result/pi0_key_state_encoding_ablation/cover_blocks_label_id` |
+| `pi0_key_state_encoding_ablation` | `battery_try_micro_stage_label_id` | 13/100 = 13% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_battery_try_micro_stage_label_id/30000` | `eval_result/pi0_key_state_encoding_ablation/battery_try_micro_stage_label_id` |
 |  |  |  |  |  |  |  |
-| `cover_blocks_key_state_design` | `exec2_attr3_no_phase` | - | running | todo | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/cover_blocks_key_state_design_exec2_attr3_no_phase` | - |
-| `cover_blocks_key_state_design` | `phase_exec2_attr3` | - | running | todo | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/cover_blocks_key_state_design_phase_exec2_attr3` | - |
+| `cover_blocks_key_state_design` | `exec2_attr3_no_phase` | 0/100 = 0% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/cover_blocks_key_state_design_exec2_attr3_no_phase/30000` | `eval_result/cover_blocks_key_state_design/exec2_attr3_no_phase` |
+| `cover_blocks_key_state_design` | `phase_exec2_attr3` | 1/100 = 1% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/cover_blocks_key_state_design_phase_exec2_attr3/30000` | `eval_result/cover_blocks_key_state_design/phase_exec2_attr3` |
