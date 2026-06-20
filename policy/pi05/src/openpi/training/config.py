@@ -535,6 +535,9 @@ class TrainConfig:
     save_interval: int = 10000
     # Maximum number of recent checkpoints to keep.
     checkpoint_max_to_keep: int = 2
+    # If true, save optimizer state and non-EMA training params so the run can be resumed.
+    # Inference only needs params/ and assets/, so this is disabled by default to reduce checkpoint size.
+    save_train_state: bool = False
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
     keep_period: int | None = None
 

@@ -63,6 +63,14 @@ def initialize_checkpoint_dir(
     if resuming and tuple(mngr.all_steps()) in [(), (0,)]:
         logging.info("Checkpoint directory exists, but does not contain any checkpoints. Aborting resume.")
         resuming = False
+    elif resuming:
+        latest_step = mngr.latest_step()
+        if latest_step is not None and not (checkpoint_dir / str(latest_step) / "train_state").exists():
+            raise FileNotFoundError(
+                f"Cannot resume from checkpoint {checkpoint_dir / str(latest_step)} because it does not contain "
+                "train_state. Inference-only checkpoints contain params and assets but cannot resume training. "
+                "Set --save-train-state=true when launching training if resumable checkpoints are required."
+            )
 
     return mngr, resuming
 
@@ -72,6 +80,8 @@ def save_state(
     state: training_utils.TrainState,
     data_loader: _data_loader.DataLoader,
     step: int,
+    *,
+    save_train_state: bool = False,
 ):
     def save_assets(directory: epath.Path):
         # Save the normalization stats.
@@ -85,9 +95,10 @@ def save_state(
         train_state, params = _split_params(state)
     items = {
         "assets": save_assets,
-        "train_state": train_state,
         "params": {"params": params},
     }
+    if save_train_state:
+        items["train_state"] = train_state
     checkpoint_manager.save(step, items)
 
 
