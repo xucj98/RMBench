@@ -6,17 +6,17 @@
 `pi0_lora_key_state` 使用默认 30k checkpoint 结果。论文 DP / Mem-0 / Pi0.5
 来自 `PROGRESS.md` 记录的 RMBench Table 1。
 
-| Task | Paper DP | Paper Mem-0 | Paper Pi0.5 | Repro DP | Repro Mem-0 | pi0_lora | pi0_full | pi05_full | pi0_lora_key_state | pi0_full_key_state | pi05_full_key_state |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `observe_and_pickup` | 1% | 4% | 9% | 2% | 4% | 4% |  |  |  |  |  |
-| `rearrange_blocks` | 0% | 89% | 13% | 0% | 0% | 1% | 21% | 20% | 3% | 37% | 44% / running |
-| `put_back_block` | 0% | 90% | 11% | 0% |  | 7% |  |  | 55% | 68% | running |
-| `swap_blocks` | 11% | 67% | 24% | 15% |  | 16% |  | 14% | 44% |  | 85% / running |
-| `swap_T` | 20% | 14% | 15% | 11% |  | 13% |  |  |  |  |  |
-| `battery_try` | 10% | 28% | 16% | 13% |  | 8% | 13% | 17% | 15% |  | 29% / running |
-| `blocks_ranking_try` | 10% | 18% | 6% | 3% |  | 16% |  |  |  |  |  |
-| `cover_blocks` | 0% | 68% | 0% | 0% |  | 1% |  |  | 0% |  | running |
-| `press_button` | 0% | 0% | 0% | 0% |  | 3% |  |  |  |  |  |
+| Task | Paper DP | Paper Mem-0 | Paper Pi0.5 | Repro DP | Repro Mem-0 | pi0_lora | pi0_full | pi05_full | pi0_lora_key_state | pi0_full_key_state | pi05_full_key_state @20k | @30k | @40k |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `observe_and_pickup` | 1% | 4% | 9% | 2% | 4% | 4% |  |  |  |  |  |  |  |
+| `rearrange_blocks` | 0% | 89% | 13% | 0% | 0% | 1% | 21% | 20% | 3% | 37% | 30% | 44% | 41% |
+| `put_back_block` | 0% | 90% | 11% | 0% |  | 7% |  |  | 55% | 68% | 65% | 59% | 60% |
+| `swap_blocks` | 11% | 67% | 24% | 15% |  | 16% |  | 14% | 44% |  | 86% | 84% | 93% |
+| `swap_T` | 20% | 14% | 15% | 11% |  | 13% |  |  |  |  |  |  |  |
+| `battery_try` | 10% | 28% | 16% | 13% |  | 8% | 13% | 17% | 15% |  | 33% | 32% | 34% |
+| `blocks_ranking_try` | 10% | 18% | 6% | 3% |  | 16% |  |  |  |  |  |  |  |
+| `cover_blocks` | 0% | 68% | 0% | 0% |  | 1% |  |  | 0% |  | 10% | 23% | 15% |
+| `press_button` | 0% | 0% | 0% | 0% |  | 3% |  |  |  |  |  |  |  |
 
 ## 实验索引
 
@@ -81,14 +81,24 @@ metadata、`command.txt`、`config.yaml` 以及 W&B 记录为准。
 |  |  |  |  |  |  |  |
 | `pi0_full_key_state` | `rearrange_blocks` | 37/100 = 37% | finished | finished | `policy/pi05/checkpoints/pi0_full_key_state/pi0_full_key_state_rearrange_blocks/30000` | `eval_result/pi0_full_key_state/rearrange_blocks` |
 |  |  |  |  |  |  |  |
-| `pi05_full_key_state` | `rearrange_blocks@ckpt30000` | 44/100 = 44% | finished | finished | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_rearrange_blocks/30000` | `eval_result/pi05_full_key_state/rearrange_blocks` |
-| `pi05_full_key_state` | `swap_blocks` | 85/100 = 85% | finished | finished | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks/20000` | `eval_result/pi05_full_key_state/swap_blocks` |
-| `pi05_full_key_state` | `battery_try` | 29/100 = 29% | finished | finished | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try/20000` | `eval_result/pi05_full_key_state/battery_try` |
-| `pi05_full_key_state` | `put_back_block@ckpt40000` | - | running | todo | `policy/pi05/checkpoints/pi05_full_key_state/put_back_block` | - |
-| `pi05_full_key_state` | `rearrange_blocks@ckpt40000` | - | running | todo | `policy/pi05/checkpoints/pi05_full_key_state/rearrange_blocks` | - |
-| `pi05_full_key_state` | `swap_blocks@ckpt40000` | - | running | todo | `policy/pi05/checkpoints/pi05_full_key_state/swap_blocks` | - |
-| `pi05_full_key_state` | `battery_try@ckpt40000` | - | running | todo | `policy/pi05/checkpoints/pi05_full_key_state/battery_try` | - |
-| `pi05_full_key_state` | `cover_blocks@ckpt40000` | - | running | todo | `policy/pi05/checkpoints/pi05_full_key_state/cover_blocks` | - |
+| `pi05_full_key_state` | `legacy_rearrange_blocks@ckpt30000` | 44/100 = 44% | finished | finished | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_rearrange_blocks/30000` | `eval_result/pi05_full_key_state/rearrange_blocks` |
+| `pi05_full_key_state` | `legacy_swap_blocks@ckpt20000` | 85/100 = 85% | finished | finished | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks/20000` | `eval_result/pi05_full_key_state/swap_blocks` |
+| `pi05_full_key_state` | `legacy_battery_try@ckpt20000` | 29/100 = 29% | finished | finished | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try/20000` | `eval_result/pi05_full_key_state/battery_try` |
+| `pi05_full_key_state` | `put_back_block@ckpt20k` | 65/100 = 65% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/put_back_block/20000` | `eval_result/pi05_full_key_state/put_back_block@ckpt20k` |
+| `pi05_full_key_state` | `put_back_block@ckpt30k` | 59/100 = 59% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/put_back_block/30000` | `eval_result/pi05_full_key_state/put_back_block@ckpt30k` |
+| `pi05_full_key_state` | `put_back_block@ckpt40k` | 60/100 = 60% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/put_back_block/40000` | `eval_result/pi05_full_key_state/put_back_block@ckpt40k` |
+| `pi05_full_key_state` | `rearrange_blocks@ckpt20k` | 30/100 = 30% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/rearrange_blocks/20000` | `eval_result/pi05_full_key_state/rearrange_blocks@ckpt20k` |
+| `pi05_full_key_state` | `rearrange_blocks@ckpt30k` | 44/100 = 44% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/rearrange_blocks/30000` | `eval_result/pi05_full_key_state/rearrange_blocks@ckpt30k` |
+| `pi05_full_key_state` | `rearrange_blocks@ckpt40k` | 41/100 = 41% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/rearrange_blocks/40000` | `eval_result/pi05_full_key_state/rearrange_blocks@ckpt40k` |
+| `pi05_full_key_state` | `swap_blocks@ckpt20k` | 86/100 = 86% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/swap_blocks/20000` | `eval_result/pi05_full_key_state/swap_blocks@ckpt20k` |
+| `pi05_full_key_state` | `swap_blocks@ckpt30k` | 84/100 = 84% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/swap_blocks/30000` | `eval_result/pi05_full_key_state/swap_blocks@ckpt30k` |
+| `pi05_full_key_state` | `swap_blocks@ckpt40k` | 93/100 = 93% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/swap_blocks/40000` | `eval_result/pi05_full_key_state/swap_blocks@ckpt40k` |
+| `pi05_full_key_state` | `battery_try@ckpt20k` | 33/100 = 33% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/battery_try/20000` | `eval_result/pi05_full_key_state/battery_try@ckpt20k` |
+| `pi05_full_key_state` | `battery_try@ckpt30k` | 32/100 = 32% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/battery_try/30000` | `eval_result/pi05_full_key_state/battery_try@ckpt30k` |
+| `pi05_full_key_state` | `battery_try@ckpt40k` | 34/100 = 34% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/battery_try/40000` | `eval_result/pi05_full_key_state/battery_try@ckpt40k` |
+| `pi05_full_key_state` | `cover_blocks@ckpt20k` | 10/100 = 10% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/cover_blocks/20000` | `eval_result/pi05_full_key_state/cover_blocks@ckpt20k` |
+| `pi05_full_key_state` | `cover_blocks@ckpt30k` | 23/100 = 23% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/cover_blocks/30000` | `eval_result/pi05_full_key_state/cover_blocks@ckpt30k` |
+| `pi05_full_key_state` | `cover_blocks@ckpt40k` | 15/100 = 15% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/cover_blocks/40000` | `eval_result/pi05_full_key_state/cover_blocks@ckpt40k` |
 |  |  |  |  |  |  |  |
 | `pi0_key_state_encoding_ablation` | `cover_blocks_label_id` | 0/100 = 0% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_cover_blocks_label_id/30000` | `eval_result/pi0_key_state_encoding_ablation/cover_blocks_label_id` |
 | `pi0_key_state_encoding_ablation` | `battery_try_micro_stage_label_id` | 13/100 = 13% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_battery_try_micro_stage_label_id/30000` | `eval_result/pi0_key_state_encoding_ablation/battery_try_micro_stage_label_id` |
