@@ -12,6 +12,8 @@ import hydra
 import torch
 from omegaconf import OmegaConf
 import pathlib
+import shutil
+import yaml
 from torch.utils.data import DataLoader
 import copy
 
@@ -55,6 +57,40 @@ class RobotWorkspace(BaseWorkspace):
         # configure training state
         self.global_step = 0
         self.epoch = 0
+
+    def _write_checkpoint_metadata(self, checkpoint_path: pathlib.Path):
+        metadata_dir = checkpoint_path.parent.joinpath("metadata")
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+
+        config_payload = OmegaConf.to_container(self.cfg, resolve=True)
+        with metadata_dir.joinpath("train_config.yaml").open("w", encoding="utf-8") as f:
+            yaml.safe_dump(config_payload, f, allow_unicode=True, sort_keys=False)
+
+        runtime = config_payload.get("_runtime", {}) if isinstance(config_payload, dict) else {}
+        with metadata_dir.joinpath("command.txt").open("w", encoding="utf-8") as f:
+            f.write(f"commit: {runtime.get('git_commit', 'unknown')}\n")
+            f.write(f"git_status: {runtime.get('git_status', 'unknown')}\n")
+            f.write(f"cwd: {runtime.get('cwd', '')}\n")
+            env = runtime.get("env", {})
+            if env:
+                f.write("env:\n")
+                for key, value in env.items():
+                    f.write(f"  {key}={value}\n")
+            f.write("command:\n")
+            f.write(f"  {runtime.get('command', '')}\n")
+
+        if getattr(self, "wandb_run", None) is not None:
+            metadata_dir.joinpath("wandb_id.txt").write_text(self.wandb_run.id, encoding="utf-8")
+
+        zarr_path = pathlib.Path(config_payload["task"]["dataset"]["zarr_path"])
+        if not zarr_path.is_absolute():
+            zarr_path = pathlib.Path.cwd().joinpath(zarr_path)
+        source_meta = zarr_path.joinpath("meta", "rmbench")
+        if source_meta.exists():
+            target_meta = metadata_dir.joinpath("rmbench_data_meta")
+            if target_meta.exists():
+                shutil.rmtree(target_meta)
+            shutil.copytree(source_meta, target_meta)
 
     def run(self):
         cfg = copy.deepcopy(self.cfg)
@@ -264,7 +300,8 @@ class RobotWorkspace(BaseWorkspace):
                 if ((self.epoch + 1) % cfg.training.checkpoint_every) == 0:
                     # checkpointing
                     save_name = pathlib.Path(self.cfg.task.dataset.zarr_path).stem
-                    self.save_checkpoint(f"checkpoints/{save_name}-{seed}/{self.epoch + 1}.ckpt")  # TODO
+                    checkpoint_path = self.save_checkpoint(f"checkpoints/{save_name}-{seed}/{self.epoch + 1}.ckpt")  # TODO
+                    self._write_checkpoint_metadata(pathlib.Path(checkpoint_path))
 
                 # ========= eval end for this epoch ==========
                 policy.train()

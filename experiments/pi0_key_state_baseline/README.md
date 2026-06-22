@@ -60,6 +60,12 @@ info.micro_stages 非空、递增、frame range 非空且不超过 hdf5 action f
 `source_data_config.yaml` 和 `source_data_command.txt`。转换命令、git commit、cwd
 和白名单环境变量由 `convert_command.txt` 自动记录；README 不重复手写这些字段。
 
+key-state schema 使用公共配置：
+
+```text
+converter_configs/key_state_baseline/<task>.yaml
+```
+
 目标 repo：
 
 ```text

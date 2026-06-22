@@ -864,10 +864,10 @@ python script/collect_data.py <task> demo_clean_state
 
 新增或重构通用 converter，使其从 tracked converter config 读取任务定义，把 RMBench hdf5 数据转成 LeRobot 数据集。converter 负责所有 key-state 数据处理，包括 phase 合并、attribute 更新窗口、one-hot 编码和 padding。
 
-每个任务应有一个被 git 管理的 converter config。推荐放在实验批次目录下：
+每个任务应有一个被 git 管理的 converter config。公共 baseline schema 统一放在：
 
 ```text
-experiments/pi0_key_state_baseline/converter_configs/
+converter_configs/key_state_baseline/
   rearrange_blocks.yaml
   swap_blocks.yaml
   battery_try.yaml
@@ -968,7 +968,7 @@ bash experiments/pi0_key_state_baseline/commands/convert_smoke.sh
 
 ```bash
 python policy/pi05/examples/aloha_real/convert_robotwin_key_state_to_lerobot.py \
-  --config experiments/pi0_key_state_baseline/converter_configs/swap_blocks.yaml \
+  --config converter_configs/key_state_baseline/swap_blocks.yaml \
   --overrides \
     dataset.episodes=1 \
     dataset.repo_id=swap_blocks_demo_clean_state_key_state_smoke

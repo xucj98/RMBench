@@ -6,6 +6,7 @@ expert_data_num=${3}
 seed=${4}
 action_dim=${5}
 gpu_id=${6}
+wandb_group=${7:-}
 
 head_camera_type=D435
 
@@ -35,6 +36,11 @@ fi
 export HYDRA_FULL_ERROR=1 
 export CUDA_VISIBLE_DEVICES=${gpu_id}
 
+wandb_group_args=()
+if [ -n "$wandb_group" ]; then
+    wandb_group_args+=(logging.group=${wandb_group})
+fi
+
 if [ ! -d "./data/${task_name}-${task_config}-${expert_data_num}.zarr" ]; then
     bash process_data.sh ${task_name} ${task_config} ${expert_data_num}
 fi
@@ -47,6 +53,7 @@ python train.py --config-name=${config_name}.yaml \
                             training.device="cuda:0" \
                             exp_name=${exp_name} \
                             logging.mode=${wandb_mode} \
+                            "${wandb_group_args[@]}" \
                             setting=${task_config} \
                             expert_data_num=${expert_data_num} \
                             head_camera_type=$head_camera_type

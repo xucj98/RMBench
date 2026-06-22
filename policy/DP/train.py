@@ -16,6 +16,8 @@ import pathlib, yaml
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 
 import os
+import shlex
+import subprocess
 
 current_file_path = os.path.abspath(__file__)
 parent_directory = os.path.dirname(current_file_path)
@@ -31,6 +33,54 @@ def get_camera_config(camera_type):
 
     assert camera_type in args, f"camera {camera_type} is not defined"
     return args[camera_type]
+
+
+def get_git_commit():
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=pathlib.Path(__file__).resolve().parents[2],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def get_git_status():
+    try:
+        status = subprocess.check_output(
+            ["git", "status", "--short"],
+            cwd=pathlib.Path(__file__).resolve().parents[2],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+    return "clean" if not status else status
+
+
+def get_runtime_env():
+    keys = [
+        "CUDA_VISIBLE_DEVICES",
+        "HYDRA_FULL_ERROR",
+        "PYTHONPATH",
+        "WANDB_PROJECT",
+        "WANDB_RUN_GROUP",
+        "WANDB_MODE",
+    ]
+    return {key: os.environ[key] for key in keys if key in os.environ}
+
+
+def attach_runtime_config(cfg: OmegaConf):
+    OmegaConf.set_struct(cfg, False)
+    cfg["_runtime"] = {
+        "git_commit": get_git_commit(),
+        "git_status": get_git_status(),
+        "cwd": str(pathlib.Path.cwd()),
+        "command": " ".join(shlex.quote(item) for item in sys.argv),
+        "env": get_runtime_env(),
+    }
 
 
 # allows arbitrary python code execution in configs using the ${eval:''} resolver
@@ -59,6 +109,7 @@ def main(cfg: OmegaConf):
         head_camera_cfg["h"],
         head_camera_cfg["w"],
     ]
+    attach_runtime_config(cfg)
 
     cls = hydra.utils.get_class(cfg._target_)
     workspace: BaseWorkspace = cls(cfg)
