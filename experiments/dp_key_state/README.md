@@ -68,10 +68,24 @@ smoke 产物不进入本 README 的结果表，正式转换和训练从 clean co
 
 ## 当前状态
 
-| Task | zarr | train | checkpoint |
-| --- | --- | --- | --- |
-| `put_back_block` | todo | todo | `policy/DP/checkpoints/put_back_block-demo_clean_state_key_state-50-0` |
-| `rearrange_blocks` | todo | todo | `policy/DP/checkpoints/rearrange_blocks-demo_clean_state_key_state-50-0` |
-| `swap_blocks` | todo | todo | `policy/DP/checkpoints/swap_blocks-demo_clean_state_key_state-50-0` |
-| `battery_try` | todo | todo | `policy/DP/checkpoints/battery_try-demo_clean_state_key_state-50-0` |
-| `cover_blocks` | todo | todo | `policy/DP/checkpoints/cover_blocks-demo_clean_state_key_state-50-0` |
+正式 zarr 转换已完成，5 个训练已启动。
+
+| Task | zarr frames | GPU | train | wandb | checkpoint | stdout |
+| --- | ---: | ---: | --- | --- | --- | --- |
+| `put_back_block` | 17588 | 1 | running | `ab976la2` | `policy/DP/checkpoints/put_back_block-demo_clean_state_key_state-50-0` | `policy/DP/checkpoints/put_back_block-demo_clean_state_key_state-50-0/stdout.log` |
+| `rearrange_blocks` | 20103 | 2 | running | `vf8hbz9z` | `policy/DP/checkpoints/rearrange_blocks-demo_clean_state_key_state-50-0` | `policy/DP/checkpoints/rearrange_blocks-demo_clean_state_key_state-50-0/stdout.log` |
+| `swap_blocks` | 29920 | 3 | running | `3poajv2a` | `policy/DP/checkpoints/swap_blocks-demo_clean_state_key_state-50-0` | `policy/DP/checkpoints/swap_blocks-demo_clean_state_key_state-50-0/stdout.log` |
+| `battery_try` | 32626 | 4 | running | `hcuznegt` | `policy/DP/checkpoints/battery_try-demo_clean_state_key_state-50-0` | `policy/DP/checkpoints/battery_try-demo_clean_state_key_state-50-0/stdout.log` |
+| `cover_blocks` | 50904 | 5 | running | `cia97huy` | `policy/DP/checkpoints/cover_blocks-demo_clean_state_key_state-50-0` | `policy/DP/checkpoints/cover_blocks-demo_clean_state_key_state-50-0/stdout.log` |
+
+每个 zarr 目录下的 `meta/rmbench/` 均包含：
+
+```text
+key_state_config.yaml
+convert_command.txt
+source_data_config.yaml
+source_data_command.txt
+summary.yaml
+```
+
+`convert_command.txt` 显示正式转换在 clean worktree 上执行。
