@@ -40,11 +40,11 @@ metadata、`command.txt`、`config.yaml` 以及 W&B 记录为准。
 | `dp_reproduction` | `press_button` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/press_button-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/press_button` |
 | `dp_reproduction` | `blocks_ranking_try` | 3/100 = 3% | finished | finished | `policy/DP/checkpoints/blocks_ranking_try-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/blocks_ranking_try` |
 |  |  |  |  |  |  |  |
-| `dp_key_state` | `put_back_block` | - | running | todo | `policy/DP/checkpoints/put_back_block-demo_clean_state_key_state-50-0/600.ckpt` | - |
-| `dp_key_state` | `rearrange_blocks` | - | running | todo | `policy/DP/checkpoints/rearrange_blocks-demo_clean_state_key_state-50-0/600.ckpt` | - |
-| `dp_key_state` | `swap_blocks` | - | running | todo | `policy/DP/checkpoints/swap_blocks-demo_clean_state_key_state-50-0/600.ckpt` | - |
-| `dp_key_state` | `battery_try` | - | running | todo | `policy/DP/checkpoints/battery_try-demo_clean_state_key_state-50-0/600.ckpt` | - |
-| `dp_key_state` | `cover_blocks` | - | running | todo | `policy/DP/checkpoints/cover_blocks-demo_clean_state_key_state-50-0/600.ckpt` | - |
+| `dp_key_state` | `put_back_block` | - | finished | running | `policy/DP/checkpoints/put_back_block-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/put_back_block` |
+| `dp_key_state` | `rearrange_blocks` | - | finished | running | `policy/DP/checkpoints/rearrange_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/rearrange_blocks` |
+| `dp_key_state` | `swap_blocks` | - | finished | running | `policy/DP/checkpoints/swap_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/swap_blocks` |
+| `dp_key_state` | `battery_try` | - | finished | running | `policy/DP/checkpoints/battery_try-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/battery_try` |
+| `dp_key_state` | `cover_blocks` | - | finished | running | `policy/DP/checkpoints/cover_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/cover_blocks` |
 |  |  |  |  |  |  |  |
 | `pi0_lora_baseline` | `swap_blocks` | 16/100 = 16% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/swap_blocks/30000` | `eval_result/pi0_lora_baseline/swap_blocks_raw_100_video5_20260614_pi0_baseline_100` |
 | `pi0_lora_baseline` | `swap_T` | 13/100 = 13% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/swap_T/30000` | `eval_result/pi0_lora_baseline/swap_T_raw_100_video5_20260614_pi0_baseline_100` |
