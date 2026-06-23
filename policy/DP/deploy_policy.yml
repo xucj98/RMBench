@@ -2,6 +2,7 @@
 policy_name: DP
 task_name: null
 task_config: null
+checkpoint_task_config: null
 ckpt_setting: null
 seed: null
 instruction_type: unseen
@@ -12,3 +13,5 @@ head_camera_type: D435
 ddim_steps: 10
 eval_video_log: true
 eval_video_count: 5
+eval_video_key_state_overlay: false
+key_state_update_mode: raw

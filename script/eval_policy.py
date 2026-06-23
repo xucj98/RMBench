@@ -72,12 +72,40 @@ def resolve_eval_save_dir(usr_args, task_name, policy_name, task_config, ckpt_se
 
 
 def requires_key_state_metadata(usr_args):
-    train_config_name = str(usr_args.get("train_config_name", ""))
-    model_name = str(usr_args.get("model_name", ""))
-    return "key_state" in train_config_name or "key_state" in model_name
+    values = [
+        usr_args.get("train_config_name"),
+        usr_args.get("model_name"),
+        usr_args.get("task_config"),
+        usr_args.get("checkpoint_task_config"),
+        usr_args.get("ckpt_setting"),
+    ]
+    return any("key_state" in str(value) for value in values if value is not None)
 
 
 def resolve_checkpoint_paths(usr_args):
+    if usr_args.get("policy_name") == "DP":
+        task_name = usr_args.get("task_name")
+        task_config = usr_args.get("checkpoint_task_config") or usr_args.get("task_config")
+        expert_data_num = usr_args.get("expert_data_num")
+        seed = usr_args.get("seed")
+        checkpoint_num = usr_args.get("checkpoint_num")
+        if not task_name or not task_config or expert_data_num is None or seed is None or checkpoint_num is None:
+            return {}
+
+        checkpoint_run_dir = (
+            Path("policy/DP/checkpoints")
+            / f"{task_name}-{task_config}-{expert_data_num}-{seed}"
+        )
+        checkpoint_dir = checkpoint_run_dir / f"{checkpoint_num}.ckpt"
+        checkpoint_metadata_dir = checkpoint_run_dir / "metadata"
+        key_state_config = checkpoint_metadata_dir / "rmbench_data_meta" / "key_state_config.yaml"
+        return {
+            "checkpoint_dir": checkpoint_dir,
+            "checkpoint_run_dir": checkpoint_run_dir,
+            "checkpoint_metadata_source": checkpoint_metadata_dir,
+            "key_state_config_source": key_state_config,
+        }
+
     train_config_name = usr_args.get("train_config_name")
     model_name = usr_args.get("model_name")
     checkpoint_id = usr_args.get("checkpoint_id")
