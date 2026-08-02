@@ -82,11 +82,11 @@ smoke 产物不进入本 README 的结果表，正式转换和训练从 clean co
 
 | Task | GPU | eval | wandb | eval result | stdout |
 | --- | ---: | --- | --- | --- | --- |
-| `put_back_block` | 0 | running | `tbrnpcau` | `eval_result/dp_key_state/put_back_block` | `eval_result/dp_key_state/put_back_block/stdout.log` |
-| `rearrange_blocks` | 1 | running | `9w3uoco5` | `eval_result/dp_key_state/rearrange_blocks` | `eval_result/dp_key_state/rearrange_blocks/stdout.log` |
-| `swap_blocks` | 2 | running | `1ahmwrzb` | `eval_result/dp_key_state/swap_blocks` | `eval_result/dp_key_state/swap_blocks/stdout.log` |
-| `battery_try` | 3 | running | `hjq06k6l` | `eval_result/dp_key_state/battery_try` | `eval_result/dp_key_state/battery_try/stdout.log` |
-| `cover_blocks` | 4 | running | `57dkr449` | `eval_result/dp_key_state/cover_blocks` | `eval_result/dp_key_state/cover_blocks/stdout.log` |
+| `put_back_block` | 3 | running | `d3icby29` | `eval_result/dp_key_state/put_back_block` | `eval_result/dp_key_state/put_back_block/stdout.log` |
+| `rearrange_blocks` | 4 | running | `77t132w4` | `eval_result/dp_key_state/rearrange_blocks` | `eval_result/dp_key_state/rearrange_blocks/stdout.log` |
+| `swap_blocks` | 5 | running | `vejjqg0l` | `eval_result/dp_key_state/swap_blocks` | `eval_result/dp_key_state/swap_blocks/stdout.log` |
+| `battery_try` | 6 | running | `a0t2i9sl` | `eval_result/dp_key_state/battery_try` | `eval_result/dp_key_state/battery_try/stdout.log` |
+| `cover_blocks` | 7 | running | `gyv9bmd3` | `eval_result/dp_key_state/cover_blocks` | `eval_result/dp_key_state/cover_blocks/stdout.log` |
 
 每个 zarr 目录下的 `meta/rmbench/` 均包含：
 
