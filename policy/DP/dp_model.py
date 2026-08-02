@@ -33,7 +33,12 @@ class DP:
             n_obs_steps = int(self.cfg.n_obs_steps)
         if n_action_steps is None:
             n_action_steps = int(self.cfg.n_action_steps)
-        self.runner = DPRunner(n_obs_steps=n_obs_steps, n_action_steps=n_action_steps)
+        self.n_obs_steps = int(n_obs_steps)
+        self.n_action_steps = int(n_action_steps)
+        self.runner = DPRunner(
+            n_obs_steps=self.n_obs_steps,
+            n_action_steps=self.n_action_steps,
+        )
         if ddim_steps is not None:
             self.policy.set_inference_config(num_inference_steps=ddim_steps, use_ddim=True)
         self.robot_dim = 14

@@ -1,6 +1,5 @@
 import numpy as np
 from .dp_model import DP
-import yaml
 from pathlib import Path
 
 
@@ -31,14 +30,6 @@ def resolve_checkpoint_run_dir(usr_args):
 def get_model(usr_args):
     checkpoint_run_dir = resolve_checkpoint_run_dir(usr_args)
     ckpt_file = checkpoint_run_dir / f"{usr_args['checkpoint_num']}.ckpt"
-    action_dim = usr_args['left_arm_dim'] + usr_args['right_arm_dim'] + 2 # 2 gripper
-
-    load_config_path = f'./policy/DP/diffusion_policy/config/robot_dp_{action_dim}.yaml'
-    with open(load_config_path, "r", encoding="utf-8") as f:
-        model_training_config = yaml.safe_load(f)
-    
-    n_obs_steps = model_training_config['n_obs_steps']
-    n_action_steps = model_training_config['n_action_steps']
 
     ddim_steps = usr_args.get('ddim_steps', None)
     key_state_update_mode = usr_args.get("key_state_update_mode", "raw")
@@ -46,8 +37,6 @@ def get_model(usr_args):
 
     return DP(
         str(ckpt_file),
-        n_obs_steps=n_obs_steps,
-        n_action_steps=n_action_steps,
         ddim_steps=ddim_steps,
         key_state_config_path=key_state_config_path,
         key_state_update_mode=key_state_update_mode,
@@ -57,6 +46,17 @@ def get_model(usr_args):
 def sync_eval_video_overlay(TASK_ENV, model):
     if hasattr(TASK_ENV, "set_eval_video_overlay") and hasattr(model, "get_eval_video_overlay"):
         TASK_ENV.set_eval_video_overlay(model.get_eval_video_overlay())
+
+
+def should_capture_observation(action_index, action_count, n_obs_steps, recording_video):
+    """Return whether an action's post-observation is needed before the next inference."""
+    if action_index >= action_count - 1:
+        # The outer eval loop captures the final post-action observation.
+        return False
+    if recording_video:
+        return True
+    first_required_index = max(0, action_count - n_obs_steps)
+    return action_index >= first_required_index
 
 
 def eval(TASK_ENV, model, observation):
@@ -71,13 +71,23 @@ def eval(TASK_ENV, model, observation):
     # ======== Get Action ========
     actions = model.get_action(obs)
 
-    for action in actions:
+    action_count = len(actions)
+    recording_video = TASK_ENV.is_recording_eval_video()
+    for action_index, action in enumerate(actions):
         sync_eval_video_overlay(TASK_ENV, model)
         TASK_ENV.take_action(model.action_for_env(action))
         model.update_key_state_from_action(action)
-        observation = TASK_ENV.get_obs_for_policy()
-        obs = encode_obs(observation, model)
-        model.update_obs(obs)
+        if TASK_ENV.eval_success or TASK_ENV.take_action_cnt >= TASK_ENV.step_lim:
+            break
+        if should_capture_observation(
+            action_index,
+            action_count,
+            model.n_obs_steps,
+            recording_video,
+        ):
+            observation = TASK_ENV.get_obs()
+            model.update_obs(encode_obs(observation, model))
+
 
 def reset_model(model):
     model.reset_obs()
