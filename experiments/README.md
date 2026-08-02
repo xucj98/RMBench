@@ -106,8 +106,8 @@ metadata、`command.txt`、`config.yaml` 以及 W&B 记录为准。
 | `pi05_full_key_state` | `cover_blocks@ckpt30k` | 23/100 = 23% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/cover_blocks/30000` | `eval_result/pi05_full_key_state/cover_blocks@ckpt30k` |
 | `pi05_full_key_state` | `cover_blocks@ckpt40k` | 15/100 = 15% | finished | finished | `policy/pi05/checkpoints/pi05_full_key_state/cover_blocks/40000` | `eval_result/pi05_full_key_state/cover_blocks@ckpt40k` |
 |  |  |  |  |  |  |  |
-| `pi05_full_key_state_with_prop_history` | `rearrange_blocks` | - | pending | pending | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/rearrange_blocks/30000` | `eval_result/pi05_full_key_state_with_prop_history/rearrange_blocks@ckpt30k` |
-| `pi05_full_key_state_with_prop_history` | `put_back_block` | - | pending | pending | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/put_back_block/30000` | `eval_result/pi05_full_key_state_with_prop_history/put_back_block@ckpt30k` |
+| `pi05_full_key_state_with_prop_history` | `rearrange_blocks` | - | running | pending | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/rearrange_blocks/30000` | `eval_result/pi05_full_key_state_with_prop_history/rearrange_blocks@ckpt30k` |
+| `pi05_full_key_state_with_prop_history` | `put_back_block` | - | running | pending | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/put_back_block/30000` | `eval_result/pi05_full_key_state_with_prop_history/put_back_block@ckpt30k` |
 |  |  |  |  |  |  |  |
 | `pi0_key_state_encoding_ablation` | `cover_blocks_label_id` | 0/100 = 0% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_cover_blocks_label_id/30000` | `eval_result/pi0_key_state_encoding_ablation/cover_blocks_label_id` |
 | `pi0_key_state_encoding_ablation` | `battery_try_micro_stage_label_id` | 13/100 = 13% | finished | finished | `policy/pi05/checkpoints/pi0_aloha_key_state_lora/pi0_key_state_encoding_ablation_battery_try_micro_stage_label_id/30000` | `eval_result/pi0_key_state_encoding_ablation/battery_try_micro_stage_label_id` |
