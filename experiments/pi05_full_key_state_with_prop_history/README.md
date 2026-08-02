@@ -16,8 +16,8 @@ save_interval: 10000
 xla_mem_fraction: 0.95
 wandb project: RMBench
 wandb group: pi05_full_key_state_with_prop_history
-wandb mode: offline
-train commit: 8db7b9e89d2c9e691fd5bd5825d62fa3ed5efe66
+wandb mode: online
+train commit: 0f60a68c2deffd8ebc9f07df8122c1d00f50ac1f
 eval: pending
 ```
 
@@ -65,8 +65,8 @@ put_back_block:   550fb4810069fef006794e23d799d8ee1505999601efc0b145a47fc1f1fa54
 从 workspace 根目录启动；GPU 作为运行参数传入，默认不要使用 GPU0：
 
 ```bash
-WANDB_MODE=offline bash experiments/pi05_full_key_state_with_prop_history/commands/train.sh rearrange_blocks 1
-WANDB_MODE=offline bash experiments/pi05_full_key_state_with_prop_history/commands/train.sh put_back_block 2
+bash experiments/pi05_full_key_state_with_prop_history/commands/train.sh rearrange_blocks 1
+bash experiments/pi05_full_key_state_with_prop_history/commands/train.sh put_back_block 2
 ```
 
 产物与日志：
@@ -79,8 +79,8 @@ policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/<task>/train.pid
 
 | Task | Repo ID | Status | GPU | wandb id | Checkpoint |
 | --- | --- | --- | ---: | --- | --- |
-| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | running (PID 383834) | 1 | `0vynncc3` (offline) | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/rearrange_blocks` |
-| `put_back_block` | `put_back_block_demo_clean_state_key_state` | running (PID 383840) | 2 | `g0xf3ggt` (offline) | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/put_back_block` |
+| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | running (PID 401514) | 1 | [`iy84omxw`](https://wandb.ai/xucj98/RMBench/runs/iy84omxw) | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/rearrange_blocks` |
+| `put_back_block` | `put_back_block_demo_clean_state_key_state` | running (PID 401520) | 2 | [`fig03zgh`](https://wandb.ai/xucj98/RMBench/runs/fig03zgh) | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/put_back_block` |
 
 ## 评测
 
