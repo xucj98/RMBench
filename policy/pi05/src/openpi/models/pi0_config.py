@@ -31,12 +31,20 @@ class Pi0Config(_model.BaseModelConfig):
     pi05: bool = False
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore
+    # Number of proprioceptive state frames: history + current + future.
+    state_sequence_length: int = 1
+    # Keep the current Pi0.5 state in the discrete prefix and additionally condition the action expert on the sequence.
+    pi05_state_sequence_in_suffix: bool = False
+    # Index of the current state inside the sequence.
+    state_sequence_current_index: int | None = None
 
     def __post_init__(self):
         if self.max_token_len is None:
             object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
         if self.discrete_state_input is None:
             object.__setattr__(self, "discrete_state_input", self.pi05)
+        if self.pi05_state_sequence_in_suffix and not self.pi05:
+            raise ValueError("pi05_state_sequence_in_suffix requires pi05=True")
 
     @property
     @override
@@ -68,7 +76,12 @@ class Pi0Config(_model.BaseModelConfig):
                     "left_wrist_0_rgb": image_mask_spec,
                     "right_wrist_0_rgb": image_mask_spec,
                 },
-                state=jax.ShapeDtypeStruct([batch_size, self.action_dim], jnp.float32),
+                state=jax.ShapeDtypeStruct(
+                    [batch_size, self.state_sequence_length, self.action_dim]
+                    if self.state_sequence_length > 1
+                    else [batch_size, self.action_dim],
+                    jnp.float32,
+                ),
                 tokenized_prompt=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
                 tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
             )

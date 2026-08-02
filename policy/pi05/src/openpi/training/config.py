@@ -89,6 +89,12 @@ class DataConfig:
     # If true, will use the LeRobot dataset task to define the prompt.
     prompt_from_task: bool = False
 
+    # Optional state sequence sampled by the LeRobot loader. Sizes exclude/include current as named.
+    state_sequence_key: str | None = None
+    state_history_size: int = 0
+    state_future_size: int = 0
+    state_step: int = 1
+
     # Only used for RLDS data loader (ie currently only used for DROID).
     rlds_data_dir: str | None = None
     # Action space for DROID dataset.
@@ -124,16 +130,25 @@ class ModelTransformFactory(GroupFactory):
                 )
             case _model.ModelType.PI05:
                 assert isinstance(model_config, pi0_config.Pi0Config)
+                discrete_state_index = (
+                    model_config.state_sequence_current_index
+                    if model_config.pi05_state_sequence_in_suffix
+                    else None
+                )
+                input_transforms = [
+                    _transforms.InjectDefaultPrompt(self.default_prompt),
+                    _transforms.ResizeImages(224, 224),
+                    _transforms.TokenizePrompt(
+                        _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
+                        discrete_state_input=model_config.discrete_state_input,
+                        discrete_state_index=discrete_state_index,
+                    ),
+                ]
+                if model_config.state_sequence_length > 1:
+                    input_transforms.append(_transforms.BuildStateSequence(model_config.state_sequence_length))
+                input_transforms.append(_transforms.PadStatesAndActions(model_config.action_dim))
                 return _transforms.Group(
-                    inputs=[
-                        _transforms.InjectDefaultPrompt(self.default_prompt),
-                        _transforms.ResizeImages(224, 224),
-                        _transforms.TokenizePrompt(
-                            _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
-                            discrete_state_input=model_config.discrete_state_input,
-                        ),
-                        _transforms.PadStatesAndActions(model_config.action_dim),
-                    ],
+                    inputs=input_transforms,
                 )
             case _model.ModelType.PI0_FAST:
                 tokenizer_cls = (
@@ -281,6 +296,14 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 class LeRobotAlohaKeyStateDataConfig(LeRobotAlohaDataConfig):
     """ALOHA LeRobot config for datasets with key-state dims after the 14 robot dims."""
 
+    state_history_size: int = 0
+    state_future_size: int = 0
+    state_step: int = 1
+
+    @property
+    def state_sequence_length(self) -> int:
+        return self.state_history_size + 1 + self.state_future_size
+
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         data_transforms = _transforms.Group(
@@ -289,9 +312,10 @@ class LeRobotAlohaKeyStateDataConfig(LeRobotAlohaDataConfig):
         )
         if self.use_delta_joint_actions:
             delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
+            state_index = self.state_history_size if self.state_sequence_length > 1 else None
             data_transforms = data_transforms.push(
-                inputs=[_transforms.DeltaActions(delta_action_mask)],
-                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+                inputs=[_transforms.DeltaActions(delta_action_mask, state_index=state_index)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask, state_index=state_index)],
             )
 
         model_transforms = ModelTransformFactory(default_prompt=self.default_prompt)(model_config)
@@ -302,6 +326,10 @@ class LeRobotAlohaKeyStateDataConfig(LeRobotAlohaDataConfig):
             data_transforms=data_transforms,
             model_transforms=model_transforms,
             action_sequence_keys=self.action_sequence_keys,
+            state_sequence_key="observation.state" if self.state_sequence_length > 1 else None,
+            state_history_size=self.state_history_size,
+            state_future_size=self.state_future_size,
+            state_step=self.state_step,
         )
 
 
@@ -579,6 +607,32 @@ class TrainConfig:
         if self.resume and self.overwrite:
             raise ValueError("Cannot resume and overwrite at the same time.")
 
+        data_sequence_length = getattr(self.data, "state_sequence_length", 1)
+        model = self.model
+        model_sequence_length = getattr(model, "state_sequence_length", 1)
+        if data_sequence_length > 1 and model_sequence_length == 1:
+            model = dataclasses.replace(model, state_sequence_length=data_sequence_length)
+        elif model_sequence_length not in (1, data_sequence_length):
+            raise ValueError(
+                f"Model state_sequence_length={model_sequence_length} does not match data "
+                f"state_sequence_length={data_sequence_length}"
+            )
+
+        if isinstance(model, pi0_config.Pi0Config) and model.pi05_state_sequence_in_suffix:
+            if data_sequence_length <= 1:
+                raise ValueError("Pi0.5 suffix state conditioning requires a state sequence")
+            current_index = getattr(self.data, "state_history_size", 0)
+            if model.state_sequence_current_index is None:
+                model = dataclasses.replace(model, state_sequence_current_index=current_index)
+            elif model.state_sequence_current_index != current_index:
+                raise ValueError(
+                    f"Model current state index={model.state_sequence_current_index} does not match "
+                    f"history size={current_index}"
+                )
+
+        if model is not self.model:
+            object.__setattr__(self, "model", model)
+
 
 _ROBOTWIN_ALOHA_REPACK = _transforms.Group(inputs=[
     _transforms.RepackTransform({
@@ -636,6 +690,17 @@ def _robotwin_aloha_pi05_key_state_data(repo_id: str) -> LeRobotAlohaKeyStateDat
     )
 
 
+def _robotwin_aloha_pi05_key_state_history_data(repo_id: str) -> LeRobotAlohaKeyStateDataConfig:
+    return LeRobotAlohaKeyStateDataConfig(
+        repo_id=repo_id,
+        state_history_size=3,
+        state_future_size=0,
+        state_step=1,
+        repack_transforms=_ROBOTWIN_ALOHA_REPACK,
+        base_config=DataConfig(prompt_from_task=True),
+    )
+
+
 def _pi0_robotwin_lora_baseline_config() -> TrainConfig:
     model = pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora")
     return TrainConfig(
@@ -687,6 +752,27 @@ def _pi05_robotwin_key_state_full_config() -> TrainConfig:
         checkpoint_max_to_keep=3,
         batch_size=32,
         fsdp_devices=1,
+    )
+
+
+def _pi05_robotwin_key_state_prop_history_full_config() -> TrainConfig:
+    return TrainConfig(
+        name="pi05_full_key_state_with_prop_history",
+        model=pi0_config.Pi0Config(pi05=True, pi05_state_sequence_in_suffix=True),
+        data=_robotwin_aloha_pi05_key_state_history_data("fake"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params",
+            missing_regex=".*(?:lora|state_sequence_proj).*",
+        ),
+        num_train_steps=30_000,
+        checkpoint_max_to_keep=3,
+        batch_size=32,
+        fsdp_devices=1,
+        policy_metadata={
+            "batch_id": "pi05_full_key_state_with_prop_history",
+            "state_history_size": 3,
+            "state_future_size": 0,
+        },
     )
 
 
@@ -809,6 +895,7 @@ _CONFIGS = [
     _pi0_robotwin_full_baseline_config(),
     _pi05_robotwin_full_baseline_config(),
     _pi05_robotwin_key_state_full_config(),
+    _pi05_robotwin_key_state_prop_history_full_config(),
     _pi0_robotwin_lora_baseline_config(),
     _pi0_robotwin_key_state_baseline_lora_config(),
     _pi0_robotwin_key_state_baseline_full_config(),

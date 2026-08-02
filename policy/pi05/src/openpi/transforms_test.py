@@ -39,6 +39,16 @@ def test_delta_actions_noop():
     assert transform(item) is item
 
 
+def test_delta_actions_uses_current_state_from_sequence():
+    states = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
+    actions = np.array([[13, 14, 15], [16, 17, 18]])
+
+    transformed = _transforms.DeltaActions(mask=[True, False, True], state_index=3)(
+        {"state": states, "actions": actions.copy()}
+    )
+
+    assert np.all(transformed["actions"] == np.array([[3, 14, 3], [6, 17, 6]]))
+
 def test_absolute_actions():
     item = {"state": np.array([1, 2, 3]), "actions": np.array([[3, 4, 5], [5, 6, 7]])}
 
@@ -83,6 +93,32 @@ def test_tokenize_no_prompt():
 
     with pytest.raises(ValueError, match="Prompt is required"):
         transform({})
+
+
+def test_tokenize_prompt_uses_current_state_from_sequence():
+    class RecordingTokenizer:
+        def __init__(self):
+            self.state = None
+
+        def tokenize(self, prompt, state):
+            self.state = state.copy()
+            return np.array([1]), np.array([True])
+
+    tokenizer = RecordingTokenizer()
+    states = np.arange(12).reshape(4, 3)
+    _transforms.TokenizePrompt(
+        tokenizer, discrete_state_input=True, discrete_state_index=3
+    )({"prompt": "test", "state": states})
+
+    assert np.array_equal(tokenizer.state, states[3])
+
+
+def test_build_state_sequence_replicates_warm_start_state():
+    state = np.array([1, 2, 3])
+    transformed = _transforms.BuildStateSequence(4)({"state": state})
+
+    assert transformed["state"].shape == (4, 3)
+    assert np.all(transformed["state"] == state)
 
 
 def test_transform_dict():

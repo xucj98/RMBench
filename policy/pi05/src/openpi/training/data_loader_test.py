@@ -1,10 +1,40 @@
 import dataclasses
+from typing import ClassVar
 
 import jax
 
 from openpi.models import pi0_config
 from openpi.training import config as _config
 from openpi.training import data_loader as _data_loader
+
+
+def test_torch_dataset_requests_proprioceptive_history(monkeypatch):
+    captured = {}
+
+    class Metadata:
+        fps = 50
+        tasks: ClassVar[dict] = {}
+
+    class Dataset:
+        def __init__(self, repo_id, **kwargs):
+            captured["repo_id"] = repo_id
+            captured.update(kwargs)
+
+    monkeypatch.setattr(_data_loader.lerobot_dataset, "LeRobotDatasetMetadata", lambda _: Metadata())
+    monkeypatch.setattr(_data_loader.lerobot_dataset, "LeRobotDataset", Dataset)
+    data_config = _config.DataConfig(
+        repo_id="history_repo",
+        action_sequence_keys=("action",),
+        state_sequence_key="observation.state",
+        state_history_size=3,
+        state_future_size=0,
+        state_step=1,
+    )
+
+    _data_loader.create_torch_dataset(data_config, 50, pi0_config.Pi0Config())
+
+    assert captured["delta_timestamps"]["action"] == [step / 50 for step in range(50)]
+    assert captured["delta_timestamps"]["observation.state"] == [-3 / 50, -2 / 50, -1 / 50, 0]
 
 
 def test_torch_data_loader():

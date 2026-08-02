@@ -5,6 +5,7 @@
 """
 import json
 import sys
+from collections import deque
 import jax
 import numpy as np
 from pathlib import Path
@@ -49,6 +50,9 @@ class PI0:
 
         config = _config.get_config(self.train_config_name)
         self.policy_metadata = config.policy_metadata or {}
+        self.state_history_size = int(getattr(config.data, "state_history_size", 0))
+        self.state_sequence_length = self.state_history_size + 1
+        self.state_history = deque(maxlen=self.state_sequence_length)
         self.robot_dim = 14
         self.state_dim = 14
         self.key_state_task = None
@@ -279,12 +283,19 @@ class PI0:
     def update_observation_window(self, img_arr, state):
         img_front, img_right, img_left = img_arr[0], img_arr[1], img_arr[2]
         policy_state = self._state_for_policy(state)
+        if not self.state_history:
+            self.state_history.extend(policy_state.copy() for _ in range(self.state_sequence_length))
+        else:
+            self.state_history.append(policy_state.copy())
+        policy_state_input = (
+            np.stack(self.state_history, axis=0) if self.state_history_size > 0 else self.state_history[-1]
+        )
         img_front = np.transpose(img_front, (2, 0, 1))
         img_right = np.transpose(img_right, (2, 0, 1))
         img_left = np.transpose(img_left, (2, 0, 1))
 
         self.observation_window = {
-            "state": policy_state,
+            "state": policy_state_input,
             "images": {
                 "cam_high": img_front,
                 "cam_left_wrist": img_left,
@@ -300,5 +311,6 @@ class PI0:
     def reset_obsrvationwindows(self):
         self.instruction = None
         self.observation_window = None
+        self.state_history.clear()
         self.reset_key_state()
         print("successfully unset obs and language intruction")

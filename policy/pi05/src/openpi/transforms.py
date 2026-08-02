@@ -208,12 +208,15 @@ class DeltaActions(DataTransformFn):
     # can be smaller than the actual number of dimensions. If None, this transform is a no-op.
     # See `make_bool_mask` for more details.
     mask: Sequence[bool] | None
+    state_index: int | None = None
 
     def __call__(self, data: DataDict) -> DataDict:
         if "actions" not in data or self.mask is None:
             return data
 
         state, actions = data["state"], data["actions"]
+        if self.state_index is not None:
+            state = state[self.state_index]
         mask = np.asarray(self.mask)
         dims = mask.shape[-1]
         actions[..., :dims] -= np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
@@ -230,12 +233,15 @@ class AbsoluteActions(DataTransformFn):
     # can be smaller than the actual number of dimensions. If None, this transform is a no-op.
     # See `make_bool_mask` for more details.
     mask: Sequence[bool] | None
+    state_index: int | None = None
 
     def __call__(self, data: DataDict) -> DataDict:
         if "actions" not in data or self.mask is None:
             return data
 
         state, actions = data["state"], data["actions"]
+        if self.state_index is not None:
+            state = state[self.state_index]
         mask = np.asarray(self.mask)
         dims = mask.shape[-1]
         actions[..., :dims] += np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
@@ -248,6 +254,7 @@ class AbsoluteActions(DataTransformFn):
 class TokenizePrompt(DataTransformFn):
     tokenizer: _tokenizer.PaligemmaTokenizer
     discrete_state_input: bool = False
+    discrete_state_index: int | None = None
 
     def __call__(self, data: DataDict) -> DataDict:
         if (prompt := data.pop("prompt", None)) is None:
@@ -256,6 +263,14 @@ class TokenizePrompt(DataTransformFn):
         if self.discrete_state_input:
             if (state := data.get("state", None)) is None:
                 raise ValueError("State is required.")
+            state = np.asarray(state)
+            if self.discrete_state_index is not None:
+                if state.ndim != 2:
+                    raise ValueError(
+                        "discrete_state_index requires state shape (sequence_length, state_dim), "
+                        f"got {state.shape}"
+                    )
+                state = state[self.discrete_state_index]
         else:
             state = None
 
@@ -335,6 +350,26 @@ class PadStatesAndActions(DataTransformFn):
         if "actions" in data:
             data["actions"] = pad_to_dim(data["actions"], self.model_action_dim, axis=-1)
         return data
+
+
+@dataclasses.dataclass(frozen=True)
+class BuildStateSequence(DataTransformFn):
+    """Validate a state sequence or replicate a single state for warm-start inference."""
+
+    state_sequence_length: int
+
+    def __call__(self, data: DataDict) -> DataDict:
+        if self.state_sequence_length <= 1:
+            return data
+        state = np.asarray(data["state"])
+        if state.ndim == 2 and state.shape[0] == self.state_sequence_length:
+            return data
+        if state.ndim == 1:
+            data["state"] = np.repeat(state[None, :], self.state_sequence_length, axis=0)
+            return data
+        raise ValueError(
+            f"Expected {self.state_sequence_length} state frames or one state vector, got {state.shape}"
+        )
 
 
 def flatten_dict(tree: at.PyTree) -> dict:

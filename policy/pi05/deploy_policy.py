@@ -47,13 +47,15 @@ def eval(TASK_ENV, model, observation):
 
     actions = model.get_action()[:model.pi0_step]
 
-    for action in actions:
+    for step, action in enumerate(actions):
         sync_eval_video_overlay(TASK_ENV, model)
         TASK_ENV.take_action(model.action_for_env(action))
         model.update_key_state_from_action(action)
-        observation = TASK_ENV.get_obs_for_policy()
-        input_rgb_arr, input_state = encode_obs(observation)
-        model.update_observation_window(input_rgb_arr, input_state)
+        # The next eval call appends the final post-action observation. Avoid appending it twice.
+        if step + 1 < len(actions):
+            observation = TASK_ENV.get_obs_for_policy()
+            input_rgb_arr, input_state = encode_obs(observation)
+            model.update_observation_window(input_rgb_arr, input_state)
 
     # ============================
 
