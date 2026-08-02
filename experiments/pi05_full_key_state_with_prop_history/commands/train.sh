@@ -18,7 +18,7 @@ repo_id="${task}_demo_clean_state_key_state"
 run_dir="policy/pi05/checkpoints/${config}/${task}"
 mkdir -p "$run_dir"
 
-setsid bash -lc "cd policy/pi05 && env CUDA_VISIBLE_DEVICES=${gpu} XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 PYTHONPATH=src WANDB_PROJECT=RMBench WANDB_RUN_GROUP=${config} .venv/bin/python scripts/train.py ${config} --exp-name=${task} --data.repo-id=${repo_id}" \
+setsid bash -lc "cd policy/pi05 && env CUDA_VISIBLE_DEVICES=${gpu} XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 PYTHONPATH=src WANDB_PROJECT=RMBench WANDB_RUN_GROUP=${config} .venv/bin/python scripts/train.py ${config} --exp-name=${task} --data.repo-id=${repo_id} --resume" \
   > "${run_dir}/train.stdout.log" 2>&1 &
 echo $! > "${run_dir}/train.pid"
 echo "started ${task} on GPU ${gpu}: pid=$(cat "${run_dir}/train.pid")"
