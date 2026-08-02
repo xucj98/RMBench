@@ -31,7 +31,8 @@ def preprocess_observation_pytorch(
     if not set(image_keys).issubset(observation.images):
         raise ValueError(f"images dict missing keys: expected {image_keys}, got {list(observation.images)}")
 
-    batch_shape = observation.state.shape[:-1]
+    first_image = next(iter(observation.images.values()))
+    batch_shape = first_image.shape[:-3]
 
     out_images = {}
     for key in image_keys:

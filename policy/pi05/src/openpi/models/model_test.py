@@ -1,5 +1,6 @@
 from flax import nnx
 import jax
+import jax.numpy as jnp
 import pytest
 
 from openpi.models import model as _model
@@ -7,6 +8,22 @@ from openpi.models import pi0_config
 from openpi.models import pi0_fast
 from openpi.shared import download
 from openpi.shared import nnx_utils
+
+
+def test_observation_accepts_state_history():
+    batch_size = 2
+    state_history = jnp.zeros((batch_size, 4, 32), dtype=jnp.float32)
+    image = jnp.zeros((batch_size, 224, 224, 3), dtype=jnp.float32)
+    observation = _model.Observation(
+        images={key: image for key in _model.IMAGE_KEYS},
+        image_masks={},
+        state=state_history,
+    )
+
+    processed = _model.preprocess_observation(None, observation)
+
+    assert processed.state.shape == (batch_size, 4, 32)
+    assert all(mask.shape == (batch_size,) for mask in processed.image_masks.values())
 
 
 def test_pi0_model():

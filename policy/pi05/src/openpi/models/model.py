@@ -63,7 +63,7 @@ IMAGE_RESOLUTION = (224, 224)
 #         "base_0_rgb": bool[*b],  # True if image is valid
 #         ...  # Masks for additional views
 #     },
-#     "state": float32[*b, s],  # Low-dimensional robot state
+#     "state": float32[*b, s] | float32[*b, sh, s],  # Current or historical robot state
 #     "tokenized_prompt": int32[*b, l],  # Optional, tokenized language prompt
 #     "tokenized_prompt_mask": bool[*b, l],  # Optional, mask for tokenized prompt
 #     "token_ar_mask": int32[*b, l],  # Optional, autoregressive mask for FAST model
@@ -76,6 +76,7 @@ IMAGE_RESOLUTION = (224, 224)
 #   *b = batch dimensions
 #   h,w = image height/width
 #   s = state dimension
+#   sh = state sequence length
 #   l = sequence length
 #
 @at.typecheck
@@ -91,8 +92,8 @@ class Observation(Generic[ArrayT]):
     images: dict[str, at.Float[ArrayT, "*b h w c"]]
     # Image masks, with same keys as images.
     image_masks: dict[str, at.Bool[ArrayT, "*b"]]
-    # Low-dimensional robot state.
-    state: at.Float[ArrayT, "*b s"]
+    # Low-dimensional robot state, optionally with a state-sequence axis.
+    state: at.Float[ArrayT, "*b s"] | at.Float[ArrayT, "*b sh s"]
 
     # Tokenized prompt.
     tokenized_prompt: at.Int[ArrayT, "*b l"] | None = None
@@ -156,7 +157,7 @@ def preprocess_observation(
     if not set(image_keys).issubset(observation.images):
         raise ValueError(f"images dict missing keys: expected {image_keys}, got {list(observation.images)}")
 
-    batch_shape = observation.state.shape[:-1]
+    batch_shape = next(iter(observation.images.values())).shape[:-3]
 
     out_images = {}
     for key in image_keys:
