@@ -135,6 +135,7 @@ class Base_Task(gym.Env):
         self.render_freq = render_freq
 
         self.robot.set_origin_endpose()
+        self._eval_diagnostic_events = []
         self.load_actors()
         
         self.language_annotation, self.language_annotation_cache = [], 0
@@ -168,6 +169,34 @@ class Base_Task(gym.Env):
 
         self.stage_success_tag = False
         self.max_reward = 0
+
+    def _record_eval_diagnostic_event(self, name, **payload):
+        """Record a task event without coupling the evaluator to task internals."""
+        if not hasattr(self, "_eval_diagnostic_events"):
+            self._eval_diagnostic_events = []
+        event = {
+            "name": str(name),
+            "step": int(getattr(self, "take_action_cnt", 0)),
+        }
+        event.update(self._json_safe(payload))
+        self._eval_diagnostic_events.append(event)
+        return event
+
+    def get_eval_diagnostics(self, success):
+        """Return the common diagnostics schema; tasks may extend this method."""
+        success = bool(success)
+        return {
+            "schema_version": 1,
+            "task_name": self.task_name,
+            "success": success,
+            "primary_failure_reason": "success" if success else "unspecified_failure",
+            "conditions": {},
+            "metrics": {
+                "episode_length": int(getattr(self, "take_action_cnt", 0)),
+                "max_reward": float(getattr(self, "max_reward", 0.0)),
+            },
+            "events": self._json_safe(getattr(self, "_eval_diagnostic_events", [])),
+        }
 
     def _json_safe(self, value):
         if isinstance(value, dict):

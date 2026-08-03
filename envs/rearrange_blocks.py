@@ -88,6 +88,9 @@ class rearrange_blocks(Base_Task):
         self.first_empty_mat_name = ['left', 'null', 'right'][empty_mat]
         self.second_block_name = ['right', 'null', 'left'][empty_mat]
         self.initial_occupied_mat_side = self.second_block_name
+        self._diagnostic_first_placement_ever_ready = False
+        self._diagnostic_second_placement_ever_ready = False
+        self._diagnostic_min_button_value = 0.0
     
     def play_once(self):
         start = self._key_state_stage_start()
@@ -185,9 +188,96 @@ class rearrange_blocks(Base_Task):
             self.press_flag = False
     
     def check_press_success(self):
-        if self.check_button_pressed(self.button) and not self.press_flag:
+        button_value = float(self.get_current_button_value("button"))
+        self._diagnostic_min_button_value = min(
+            self._diagnostic_min_button_value,
+            button_value,
+        )
+        if button_value < -0.005 and not self.press_flag:
             self.press_flag = True
             self.press_cnt += 1
+            snapshot = self._get_rearrange_diagnostic_snapshot()
+            self._record_eval_diagnostic_event(
+                "button_pressed",
+                press_count=self.press_cnt,
+                stage_id=self.stage_id,
+                conditions=snapshot["conditions"],
+                metrics=snapshot["metrics"],
+            )
+
+    def _get_rearrange_diagnostic_snapshot(self):
+        block1_pose = self.block1.get_pose().p
+        block2_pose = self.block2.get_pose().p
+        final_occupy_mat_pose = self.final_occupy_mat.get_pose().p
+        mid_occupy_mat_pose = self.mid_mat.get_pose().p
+        empty_region_center = [0.13, self.block_y_lim]
+
+        block1_target_dx = float(np.abs(block1_pose[0] - final_occupy_mat_pose[0]))
+        block1_target_dy = float(np.abs(block1_pose[1] - final_occupy_mat_pose[1]))
+        block2_original_dx = float(np.abs(block2_pose[0] - mid_occupy_mat_pose[0]))
+        block2_original_dy = float(np.abs(block2_pose[1] - mid_occupy_mat_pose[1]))
+        block2_middle_dx = float(np.abs(block2_pose[0] - empty_region_center[0]))
+        block2_middle_dy = float(np.abs(block2_pose[1] - empty_region_center[1]))
+        button_value = float(self.get_current_button_value("button"))
+
+        conditions = {
+            "block1_on_target_mat": block1_target_dx < 0.03 and block1_target_dy < 0.03,
+            "block1_below_height_limit": bool(block1_pose[2] < 0.77),
+            "block2_on_original_mat": block2_original_dx < 0.03 and block2_original_dy < 0.03,
+            "block2_below_height_limit": bool(block2_pose[2] < 0.77),
+            "block2_in_middle": block2_middle_dx < 0.03 and block2_middle_dy < 0.03,
+            "right_gripper_open": bool(self.is_right_gripper_open()),
+            "button_latched_pressed": bool(self.press_flag),
+        }
+        conditions["first_placement_ready"] = bool(
+            conditions["block1_on_target_mat"]
+            and conditions["block1_below_height_limit"]
+            and conditions["block2_on_original_mat"]
+            and conditions["block2_below_height_limit"]
+        )
+        conditions["second_placement_ready"] = bool(
+            conditions["block1_on_target_mat"]
+            and conditions["block2_in_middle"]
+            and conditions["right_gripper_open"]
+            and not conditions["button_latched_pressed"]
+        )
+        return {
+            "conditions": conditions,
+            "metrics": {
+                "button_joint_position": button_value,
+                "block1_target_dx": block1_target_dx,
+                "block1_target_dy": block1_target_dy,
+                "block1_z": float(block1_pose[2]),
+                "block2_original_dx": block2_original_dx,
+                "block2_original_dy": block2_original_dy,
+                "block2_middle_dx": block2_middle_dx,
+                "block2_middle_dy": block2_middle_dy,
+                "block2_z": float(block2_pose[2]),
+            },
+        }
+
+    def _update_rearrange_diagnostic_progress(self, snapshot):
+        conditions = snapshot["conditions"]
+        if conditions["first_placement_ready"] and not self._diagnostic_first_placement_ever_ready:
+            self._diagnostic_first_placement_ever_ready = True
+            self._record_eval_diagnostic_event(
+                "first_placement_ready",
+                stage_id=self.stage_id,
+                conditions=conditions,
+                metrics=snapshot["metrics"],
+            )
+        if (
+            self.stage_id >= 1
+            and conditions["second_placement_ready"]
+            and not self._diagnostic_second_placement_ever_ready
+        ):
+            self._diagnostic_second_placement_ever_ready = True
+            self._record_eval_diagnostic_event(
+                "second_placement_ready",
+                stage_id=self.stage_id,
+                conditions=conditions,
+                metrics=snapshot["metrics"],
+            )
 
     def check_success(self):
         if self.stage_id == 2:
@@ -198,22 +288,113 @@ class rearrange_blocks(Base_Task):
         self.update_button_reset(self.button)
         self.check_press_success()
         self.set_button_unpressed(self.button, target=min(0.0, self.get_current_button_value("button")+0.002))
-        
-        block1_pose = self.block1.get_pose().p
-        block2_pose = self.block2.get_pose().p
-        final_occupy_mat_pose = self.final_occupy_mat.get_pose().p
-        mid_occupy_mat_pose = self.mid_mat.get_pose().p
-        empty_region_center = [0.13, self.block_y_lim]
+
+        snapshot = self._get_rearrange_diagnostic_snapshot()
+        self._update_rearrange_diagnostic_progress(snapshot)
+        conditions = snapshot["conditions"]
 
         if self.press_flag: # all on mat
-            if self.stage_id == 0 and self.press_cnt == 1 and np.abs(block1_pose[0] - final_occupy_mat_pose[0]) < 0.03 and np.abs(block1_pose[1] - final_occupy_mat_pose[1]) < 0.03 \
-                 and np.abs(block2_pose[0] - mid_occupy_mat_pose[0]) < 0.03 and np.abs(block2_pose[1] - mid_occupy_mat_pose[1]) < 0.03 and block1_pose[2] < 0.77 and block2_pose[2] < 0.77:
+            if self.stage_id == 0 and self.press_cnt == 1 and conditions["first_placement_ready"]:
                 self.stage_id = 1
+                self._record_eval_diagnostic_event(
+                    "stage_transition",
+                    from_stage=0,
+                    to_stage=1,
+                    conditions=conditions,
+                    metrics=snapshot["metrics"],
+                )
             return False
         else:
-            if self.stage_id == 1 and self.press_cnt == 1 and np.abs(block1_pose[0] - final_occupy_mat_pose[0]) < 0.03 and np.abs(block1_pose[1] - final_occupy_mat_pose[1]) < 0.03 \
-                and np.abs(block2_pose[0] - empty_region_center[0]) < 0.03 and np.abs(block2_pose[1] - empty_region_center[1]) < 0.03 and self.is_right_gripper_open():
+            if self.stage_id == 1 and self.press_cnt == 1 and conditions["second_placement_ready"]:
                 self.stage_id = 2
                 self.max_reward = max(self.max_reward, 1.0)
+                self._record_eval_diagnostic_event(
+                    "stage_transition",
+                    from_stage=1,
+                    to_stage=2,
+                    conditions=conditions,
+                    metrics=snapshot["metrics"],
+                )
                 return True
             return False
+
+    def _get_primary_failure_reason(self, success, terminal, first_press):
+        if success:
+            return "success"
+        if self.press_cnt > 1:
+            return "button_pressed_multiple_times"
+        if self.press_cnt == 0:
+            if not self._diagnostic_first_placement_ever_ready:
+                return "first_placement_not_completed"
+            if self._diagnostic_min_button_value < -0.001:
+                return "button_press_insufficient"
+            return "button_not_pressed"
+        if self.stage_id == 0:
+            first_press_conditions = first_press.get("conditions", {}) if first_press else {}
+            if not first_press_conditions.get("block1_on_target_mat", False):
+                return "pressed_before_block1_ready"
+            if not first_press_conditions.get("block2_on_original_mat", False):
+                return "pressed_after_block2_moved"
+            if not (
+                first_press_conditions.get("block1_below_height_limit", False)
+                and first_press_conditions.get("block2_below_height_limit", False)
+            ):
+                return "pressed_while_block_held"
+            return "invalid_first_press"
+
+        terminal_conditions = terminal["conditions"]
+        if terminal_conditions["button_latched_pressed"]:
+            return "button_not_released"
+        if not terminal_conditions["block1_on_target_mat"]:
+            return "block1_disturbed_after_valid_press"
+        if not terminal_conditions["block2_in_middle"]:
+            return "block2_not_moved_to_middle"
+        if not terminal_conditions["right_gripper_open"]:
+            return "block2_not_released"
+        return "final_conditions_not_confirmed"
+
+    def get_eval_diagnostics(self, success):
+        diagnostics = super().get_eval_diagnostics(success)
+        terminal = self._get_rearrange_diagnostic_snapshot()
+        events = getattr(self, "_eval_diagnostic_events", [])
+        first_press = next(
+            (
+                event
+                for event in events
+                if event.get("name") == "button_pressed" and event.get("press_count") == 1
+            ),
+            None,
+        )
+        first_press_conditions = first_press.get("conditions", {}) if first_press else {}
+
+        diagnostics["primary_failure_reason"] = self._get_primary_failure_reason(
+            bool(success), terminal, first_press
+        )
+        diagnostics["conditions"] = {
+            "first_placement_ever_ready": bool(self._diagnostic_first_placement_ever_ready),
+            "button_pressed_at_least_once": self.press_cnt > 0,
+            "button_pressed_exactly_once": self.press_cnt == 1,
+            "valid_press_reached_stage_1": self.stage_id >= 1,
+            "second_placement_ever_ready": bool(self._diagnostic_second_placement_ever_ready),
+            "first_press_block1_on_target": first_press_conditions.get("block1_on_target_mat"),
+            "first_press_block2_on_original": first_press_conditions.get("block2_on_original_mat"),
+            "first_press_blocks_below_height_limit": (
+                first_press_conditions.get("block1_below_height_limit", False)
+                and first_press_conditions.get("block2_below_height_limit", False)
+            ) if first_press else None,
+            "terminal_block1_on_target": terminal["conditions"]["block1_on_target_mat"],
+            "terminal_block2_in_middle": terminal["conditions"]["block2_in_middle"],
+            "terminal_right_gripper_open": terminal["conditions"]["right_gripper_open"],
+            "terminal_button_released": not terminal["conditions"]["button_latched_pressed"],
+        }
+        diagnostics["metrics"].update({
+            "press_count": int(self.press_cnt),
+            "stage_id": int(self.stage_id),
+            "minimum_button_joint_position": float(self._diagnostic_min_button_value),
+            **terminal["metrics"],
+        })
+        diagnostics["task_context"] = {
+            "empty_mat_side": self.first_empty_mat_name,
+            "initial_occupied_mat_side": self.initial_occupied_mat_side,
+        }
+        return diagnostics

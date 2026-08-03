@@ -23,6 +23,7 @@ import shlex
 import logging
 
 from generate_episode_instructions import *
+from eval_diagnostics import EvalDiagnosticsRecorder
 
 current_file_path = os.path.abspath(__file__)
 parent_directory = os.path.dirname(current_file_path)
@@ -275,6 +276,8 @@ def iter_eval_files_for_wandb(save_dir):
     root_files = [
         "_result.txt",
         "eval_log.txt",
+        "episode_diagnostics.jsonl",
+        "diagnostics_summary.json",
         "stdout.log",
         "config.yaml",
         "command.txt",
@@ -542,6 +545,7 @@ def main(usr_args):
     print("\n==================================")
 
     TASK_ENV = class_decorator(args["task_name"])
+    diagnostics_recorder = EvalDiagnosticsRecorder(save_dir)
 
     seed = usr_args["seed"]
 
@@ -558,8 +562,10 @@ def main(usr_args):
                                    st_seed,
                                    test_num=test_num,
                                    video_size=video_size,
-                                   instruction_type=instruction_type)
+                                   instruction_type=instruction_type,
+                                   diagnostics_recorder=diagnostics_recorder)
     suc_nums.append(suc_num)
+    diagnostics_summary = diagnostics_recorder.write_summary()
 
     topk_success_rate = sorted(suc_nums, reverse=True)[:topk]
 
@@ -584,6 +590,9 @@ def main(usr_args):
             for r in rewards:
                 file.write(f"Reward: {r}\n")
 
+        file.write("\n")
+        file.write(EvalDiagnosticsRecorder.format_summary(diagnostics_summary))
+
     print(f"Data has been saved to {file_path}")
     metrics = {
         "eval/success_rate": float(success_rates[0]),
@@ -591,6 +600,7 @@ def main(usr_args):
         "eval/test_num": int(test_num),
         "eval/reward": float(rewards if np.isscalar(rewards) else np.asarray(rewards).reshape(-1)[0]),
     }
+    metrics.update(EvalDiagnosticsRecorder.wandb_metrics(diagnostics_summary))
     upload_eval_to_wandb(save_dir, metrics)
     if wandb_run is not None:
         import wandb
@@ -604,7 +614,8 @@ def eval_policy(task_name,
                 st_seed,
                 test_num=100,
                 video_size=None,
-                instruction_type=None):
+                instruction_type=None,
+                diagnostics_recorder=None):
     print(f"\033[34mTask Name: {args['task_name']}\033[0m")
     print(f"\033[34mPolicy Name: {args['policy_name']}\033[0m")
 
@@ -721,14 +732,31 @@ def eval_policy(task_name,
             print("\033[91mFail!\033[0m", " | max reward:", TASK_ENV.max_reward)
             result_str = "Fail"
 
+        diagnostic_record = None
+        if diagnostics_recorder is not None:
+            diagnostic_record = diagnostics_recorder.record_episode(
+                TASK_ENV,
+                episode_id=now_id,
+                seed=now_seed,
+                success=succ,
+            )
+            failure_reason = diagnostic_record["diagnostics"]["primary_failure_reason"]
+            print(f"Diagnostic: {failure_reason}")
+
         log_file = args.get("log_file", None)
         if log_file is not None:
             try:
                 with open(log_file, "a", encoding="utf-8") as f:
+                    diagnostic_suffix = ""
+                    if diagnostic_record is not None:
+                        diagnostic_suffix = (
+                            ", failure_reason="
+                            + str(diagnostic_record["diagnostics"]["primary_failure_reason"])
+                        )
                     f.write(
                         f"episode_id={now_id}, "
                         f"seed={now_seed}, "
-                        f"result={result_str}\n"
+                        f"result={result_str}{diagnostic_suffix}\n"
                     )
             except Exception as e:
                 print(f"[Log Warning] Failed to write log: {e}")
