@@ -1,0 +1,18 @@
+dataset:
+  task: rearrange_blocks
+  source_dir: data/rearrange_blocks/demo_clean_state
+  repo_id: rearrange_blocks_demo_clean_state_token
+  episodes: 50
+
+state_layout:
+  state_dim: 14
+  robot_dim: 14
+
+structured_state_tokens:
+  fields:
+    - {name: phase, labels: [P0, P1, P2]}
+    - {name: empty_mat_side, labels: [unknown, left, right]}
+    - {name: button_press_status, labels: [NA, unconfirmed, confirmed]}
+  query_stride: 20
+  button_press_down_segment: 4
+  guard_source: language_annotation.segment_4.end

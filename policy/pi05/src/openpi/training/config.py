@@ -131,9 +131,7 @@ class ModelTransformFactory(GroupFactory):
             case _model.ModelType.PI05:
                 assert isinstance(model_config, pi0_config.Pi0Config)
                 discrete_state_index = (
-                    model_config.state_sequence_current_index
-                    if model_config.pi05_state_sequence_in_suffix
-                    else None
+                    model_config.state_sequence_current_index if model_config.pi05_state_sequence_in_suffix else None
                 )
                 input_transforms = [
                     _transforms.InjectDefaultPrompt(self.default_prompt),
@@ -330,6 +328,40 @@ class LeRobotAlohaKeyStateDataConfig(LeRobotAlohaDataConfig):
             state_history_size=self.state_history_size,
             state_future_size=self.state_future_size,
             state_step=self.state_step,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class LeRobotAlohaKeyStateTokenDataConfig(LeRobotAlohaDataConfig):
+    """ALOHA data with factorized state-token targets kept outside robot vectors."""
+
+    hard_action_boundary: bool = False
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        if not isinstance(model_config, pi0_config.Pi0Config) or model_config.key_state_token_mode == "disabled":
+            raise ValueError("LeRobotAlohaKeyStateTokenDataConfig requires an enabled Pi0.5 key-state token model")
+        data_transforms = _transforms.Group(
+            inputs=[
+                aloha_policy.KeyStateTokenAlohaInputs(
+                    adapt_to_pi=self.adapt_to_pi,
+                    hard_action_boundary=self.hard_action_boundary,
+                )
+            ],
+            outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
+        )
+        if self.use_delta_joint_actions:
+            delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=self.repack_transforms,
+            data_transforms=data_transforms,
+            model_transforms=ModelTransformFactory(default_prompt=self.default_prompt)(model_config),
+            action_sequence_keys=self.action_sequence_keys,
         )
 
 
@@ -634,18 +666,43 @@ class TrainConfig:
             object.__setattr__(self, "model", model)
 
 
-_ROBOTWIN_ALOHA_REPACK = _transforms.Group(inputs=[
-    _transforms.RepackTransform({
-        "images": {
-            "cam_high": "observation.images.cam_high",
-            "cam_left_wrist": "observation.images.cam_left_wrist",
-            "cam_right_wrist": "observation.images.cam_right_wrist",
-        },
-        "state": "observation.state",
-        "actions": "action",
-        "prompt": "prompt",
-    })
-])
+_ROBOTWIN_ALOHA_REPACK = _transforms.Group(
+    inputs=[
+        _transforms.RepackTransform(
+            {
+                "images": {
+                    "cam_high": "observation.images.cam_high",
+                    "cam_left_wrist": "observation.images.cam_left_wrist",
+                    "cam_right_wrist": "observation.images.cam_right_wrist",
+                },
+                "state": "observation.state",
+                "actions": "action",
+                "prompt": "prompt",
+            }
+        )
+    ]
+)
+
+_ROBOTWIN_ALOHA_KEY_STATE_TOKEN_REPACK = _transforms.Group(
+    inputs=[
+        _transforms.RepackTransform(
+            {
+                "images": {
+                    "cam_high": "observation.images.cam_high",
+                    "cam_left_wrist": "observation.images.cam_left_wrist",
+                    "cam_right_wrist": "observation.images.cam_right_wrist",
+                },
+                "state": "observation.state",
+                "actions": "action",
+                "prompt": "prompt",
+                "key_state_input_ids": "observation.key_state_input_ids",
+                "key_state_target_ids": "observation.key_state_target_ids",
+                "key_state_target_mask": "observation.key_state_target_mask",
+                "key_state_guard_offset": "observation.key_state_guard_offset",
+            }
+        )
+    ]
+)
 
 
 def _robotwin_aloha_data(repo_id: str) -> LeRobotAlohaDataConfig:
@@ -776,6 +833,46 @@ def _pi05_robotwin_key_state_prop_history_full_config() -> TrainConfig:
     )
 
 
+_REARRANGE_STATE_TOKEN_SCHEMA = [
+    {"name": "phase", "labels": ["P0", "P1", "P2"]},
+    {"name": "empty_mat_side", "labels": ["unknown", "left", "right"]},
+    {"name": "button_press_status", "labels": ["NA", "unconfirmed", "confirmed"]},
+]
+
+
+def _pi05_rearrange_state_token_boundary_ablation_config() -> TrainConfig:
+    return TrainConfig(
+        name="pi05_rearrange_state_token_boundary_ablation",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            key_state_token_mode="parallel",
+            key_state_num_values=(3, 3, 3),
+        ),
+        data=LeRobotAlohaKeyStateTokenDataConfig(
+            repo_id="rearrange_blocks_demo_clean_state_token",
+            assets=AssetsConfig(asset_id="rearrange_blocks_state_token"),
+            repack_transforms=_ROBOTWIN_ALOHA_KEY_STATE_TOKEN_REPACK,
+            hard_action_boundary=False,
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params",
+            missing_regex="key_state_token/.*",
+        ),
+        num_train_steps=30_000,
+        checkpoint_max_to_keep=3,
+        batch_size=32,
+        fsdp_devices=1,
+        policy_metadata={
+            "batch_id": "pi05_rearrange_state_token_boundary_ablation",
+            "key_state_schema": _REARRANGE_STATE_TOKEN_SCHEMA,
+            "serial_train_conditioning": "teacher_forcing",
+            "query_stride": 20,
+            "button_guard_source": "language_annotation.segment_4.end",
+        },
+    )
+
+
 _PUT_BACK_BLOCK_KEY_STATE_SCHEMA = [
     {
         "name": "phase",
@@ -871,18 +968,22 @@ _CONFIGS = [
         model=pi0_config.Pi0Config(pi05=True),
         data=LeRobotAlohaDataConfig(
             repo_id="swap_blocks_demo_clean",
-            repack_transforms=_transforms.Group(inputs=[
-                _transforms.RepackTransform({
-                    "images": {
-                        "cam_high": "observation.images.cam_high",
-                        "cam_left_wrist": "observation.images.cam_left_wrist",
-                        "cam_right_wrist": "observation.images.cam_right_wrist",
-                    },
-                    "state": "observation.state",
-                    "actions": "action",
-                    "prompt": "prompt",
-                })
-            ]),
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                        }
+                    )
+                ]
+            ),
             base_config=DataConfig(
                 prompt_from_task=True,
             ),
@@ -896,6 +997,7 @@ _CONFIGS = [
     _pi05_robotwin_full_baseline_config(),
     _pi05_robotwin_key_state_full_config(),
     _pi05_robotwin_key_state_prop_history_full_config(),
+    _pi05_rearrange_state_token_boundary_ablation_config(),
     _pi0_robotwin_lora_baseline_config(),
     _pi0_robotwin_key_state_baseline_lora_config(),
     _pi0_robotwin_key_state_baseline_full_config(),
@@ -1018,24 +1120,29 @@ _CONFIGS = [
         data=LeRobotAlohaDataConfig(
             repo_id="your_repo_id",  # your datasets repo_id
             adapt_to_pi=False,
-            repack_transforms=_transforms.Group(inputs=[
-                _transforms.RepackTransform({
-                    "images": {
-                        "cam_high": "observation.images.cam_high",
-                        "cam_left_wrist": "observation.images.cam_left_wrist",
-                        "cam_right_wrist": "observation.images.cam_right_wrist",
-                    },
-                    "state": "observation.state",
-                    "actions": "action",
-                    "prompt": "prompt",
-                })
-            ]),
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                        }
+                    )
+                ]
+            ),
             base_config=DataConfig(
                 prompt_from_task=True,  # Set to True for prompt by task_name
             ),
         ),
-        freeze_filter=pi0_config.Pi0Config(paligemma_variant="gemma_2b_lora",
-                                    action_expert_variant="gemma_300m_lora").get_freeze_filter(),
+        freeze_filter=pi0_config.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
+        ).get_freeze_filter(),
         batch_size=32,  # the total batch_size not pre_gpu batch_size
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30000,
@@ -1048,18 +1155,22 @@ _CONFIGS = [
         data=LeRobotAlohaDataConfig(
             repo_id="your_repo_id",  # your datasets repo_id
             adapt_to_pi=False,
-            repack_transforms=_transforms.Group(inputs=[
-                _transforms.RepackTransform({
-                    "images": {
-                        "cam_high": "observation.images.cam_high",
-                        "cam_left_wrist": "observation.images.cam_left_wrist",
-                        "cam_right_wrist": "observation.images.cam_right_wrist",
-                    },
-                    "state": "observation.state",
-                    "actions": "action",
-                    "prompt": "prompt",
-                })
-            ]),
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                        }
+                    )
+                ]
+            ),
             base_config=DataConfig(
                 prompt_from_task=True,
             ),
@@ -1079,18 +1190,22 @@ _CONFIGS = [
         data=LeRobotAlohaDataConfig(
             repo_id="your_repo_id",  # your datasets repo_id
             adapt_to_pi=False,
-            repack_transforms=_transforms.Group(inputs=[
-                _transforms.RepackTransform({
-                    "images": {
-                        "cam_high": "observation.images.cam_high",
-                        "cam_left_wrist": "observation.images.cam_left_wrist",
-                        "cam_right_wrist": "observation.images.cam_right_wrist",
-                    },
-                    "state": "observation.state",
-                    "actions": "action",
-                    "prompt": "prompt",
-                })
-            ]),
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                        }
+                    )
+                ]
+            ),
             base_config=DataConfig(
                 prompt_from_task=True,  # Set to True for prompt by task_name
             ),
@@ -1108,18 +1223,22 @@ _CONFIGS = [
         data=LeRobotAlohaDataConfig(
             repo_id="your_repo_id",  # your datasets repo_id
             adapt_to_pi=False,
-            repack_transforms=_transforms.Group(inputs=[
-                _transforms.RepackTransform({
-                    "images": {
-                        "cam_high": "observation.images.cam_high",
-                        "cam_left_wrist": "observation.images.cam_left_wrist",
-                        "cam_right_wrist": "observation.images.cam_right_wrist",
-                    },
-                    "state": "observation.state",
-                    "actions": "action",
-                    "prompt": "prompt",
-                })
-            ]),
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                        }
+                    )
+                ]
+            ),
             base_config=DataConfig(
                 prompt_from_task=True,
             ),

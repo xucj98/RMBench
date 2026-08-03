@@ -10,6 +10,7 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 from typing import Any
 
 import cv2
@@ -19,7 +20,6 @@ from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import numpy as np
 import tqdm
 import yaml
-
 
 CAMERA_MAP = {
     "cam_high": "head_camera",
@@ -120,7 +120,7 @@ def _git_status() -> str:
         ).strip()
     except Exception:
         return "unknown"
-    return "clean" if not status else status
+    return status if status else "clean"
 
 
 def _runtime_env() -> dict[str, str]:
@@ -341,10 +341,13 @@ def _schema_blocks(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     blocks = []
     if config.get("phase") is not None:
         blocks.append(("phase", config["phase"]))
-    for execution_config in _execution_blocks(config):
-        blocks.append((str(execution_config.get("name", "execution")), execution_config))
-    for attr_config in config.get("attributes", []):
-        blocks.append((str(attr_config.get("name", "attribute")), attr_config))
+    blocks.extend(
+        (str(execution_config.get("name", "execution")), execution_config)
+        for execution_config in _execution_blocks(config)
+    )
+    blocks.extend(
+        (str(attr_config.get("name", "attribute")), attr_config) for attr_config in config.get("attributes", [])
+    )
     return blocks
 
 
@@ -392,14 +395,10 @@ def _validate_layout(config: dict[str, Any]) -> None:
             raise ValueError(f"Invalid dim {block_name}: {[start, end]}")
         if _encoding(block) == "one_hot" and width != len(labels):
             raise ValueError(
-                f"one_hot dim size must match labels for {block_name}: "
-                f"dim={[start, end]}, labels={labels}"
+                f"one_hot dim size must match labels for {block_name}: " f"dim={[start, end]}, labels={labels}"
             )
         if _encoding(block) == "label_id" and width != 1:
-            raise ValueError(
-                f"label_id dim size must be 1 for {block_name}: "
-                f"dim={[start, end]}"
-            )
+            raise ValueError(f"label_id dim size must be 1 for {block_name}: " f"dim={[start, end]}")
         if occupied[start:end].any():
             raise ValueError(f"Overlapping dim {block_name}: {[start, end]}")
         occupied[start:end] = 1
@@ -424,6 +423,31 @@ def _create_empty_dataset(config: dict[str, Any]) -> LeRobotDataset:
             "names": [_feature_names(config)],
         },
     }
+    if config.get("structured_state_tokens") is not None:
+        features.update(
+            {
+                "observation.key_state_input_ids": {
+                    "dtype": "int64",
+                    "shape": (3,),
+                    "names": ["phase", "empty_mat_side", "button_press_status"],
+                },
+                "observation.key_state_target_ids": {
+                    "dtype": "int64",
+                    "shape": (3,),
+                    "names": ["phase", "empty_mat_side", "button_press_status"],
+                },
+                "observation.key_state_target_mask": {
+                    "dtype": "bool",
+                    "shape": (3,),
+                    "names": ["phase", "empty_mat_side", "button_press_status"],
+                },
+                "observation.key_state_guard_offset": {
+                    "dtype": "int64",
+                    "shape": (1,),
+                    "names": ["button_press_confirmed_minus_frame"],
+                },
+            }
+        )
     for cam in CAMERA_MAP:
         features[f"observation.images.{cam}"] = {
             "dtype": mode,
@@ -463,6 +487,7 @@ def _populate_episode(
     config: dict[str, Any],
     episode_idx: int,
     scene_info: dict[str, Any],
+    language_annotation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_dir = _as_abs_path(config["dataset"]["source_dir"])
     episode_path = source_dir / "data" / f"episode{episode_idx}.hdf5"
@@ -473,6 +498,25 @@ def _populate_episode(
         vector = ep["/joint_action/vector"][:].astype(np.float32)
         total_frames = int(vector.shape[0])
         action_frames = total_frames - 1
+        structured_config = config.get("structured_state_tokens")
+        guard_frame = None
+        if structured_config is not None:
+            if language_annotation is None:
+                raise ValueError("structured_state_tokens requires language_annotation.json")
+            segments = language_annotation[_episode_key(episode_idx)]
+            guard_segment = int(structured_config.get("button_press_down_segment", 4))
+            if len(segments) != 11 or not (0 <= guard_segment < len(segments)):
+                raise ValueError(f"Unexpected language segments for episode {episode_idx}: {len(segments)}")
+            annotated_frames = sum(int(segment[1]) for segment in segments)
+            # Language annotations count observation frames, while the converter
+            # emits N-1 transitions. Historical datasets contain both counting
+            # conventions, so accept either exact total.
+            if annotated_frames not in {action_frames, total_frames}:
+                raise ValueError(
+                    f"Language segment durations ({annotated_frames}) match neither observation frames "
+                    f"({total_frames}) nor action frames ({action_frames}) for episode {episode_idx}"
+                )
+            guard_frame = sum(int(segment[1]) for segment in segments[: guard_segment + 1])
         per_step_blocks = []
         if config.get("phase") is not None:
             per_step_blocks.append(("phase", config["phase"]))
@@ -505,6 +549,31 @@ def _populate_episode(
                 "action": action,
                 "task": instruction,
             }
+            if structured_config is not None:
+                stride = int(structured_config.get("query_stride", 20))
+
+                def state_token_ids(index: int) -> np.ndarray:
+                    block1_end = int(_resolve_ref("micro_stages.block1_place.end_frame", info, total_frames))
+                    press_return_end = int(_resolve_ref("micro_stages.press_return.end_frame", info, total_frames))
+                    phase = 0 if index < block1_end else (1 if index < press_return_end else 2)
+                    side_name = str(_resolve_ref("task_facts.empty_mat_side", info, total_frames))
+                    side = {"left": 1, "right": 2}[side_name]
+                    button = 0 if phase != 1 else 1 if index < guard_frame else 2
+                    return np.asarray([phase, side, button], dtype=np.int64)
+
+                previous_ids = (
+                    state_token_ids(frame_idx - stride)
+                    if frame_idx - stride >= 0
+                    else np.asarray([0, 0, 0], dtype=np.int64)
+                )
+                frame.update(
+                    {
+                        "observation.key_state_input_ids": previous_ids,
+                        "observation.key_state_target_ids": state_token_ids(frame_idx),
+                        "observation.key_state_target_mask": np.ones(3, dtype=np.bool_),
+                        "observation.key_state_guard_offset": np.asarray([guard_frame - frame_idx], dtype=np.int64),
+                    }
+                )
             for dst, src in CAMERA_MAP.items():
                 frame[f"observation.images.{dst}"] = _decode_image(ep[f"/observation/{src}/rgb"][frame_idx])
             dataset.add_frame(frame)
@@ -517,9 +586,13 @@ def _populate_episode(
     }
     for block_name, _block_config, ranges in per_step_ranges:
         summary[f"{block_name}_ranges"] = [
-            {"label": label, "start_frame": start, "end_frame": end}
-            for _idx, start, end, label in ranges
+            {"label": label, "start_frame": start, "end_frame": end} for _idx, start, end, label in ranges
         ]
+    if guard_frame is not None:
+        summary["button_press_confirmed"] = {
+            "frame": guard_frame,
+            "source": "language_annotation.segment_4.end",
+        }
     return summary
 
 
@@ -565,10 +638,15 @@ def convert(config: dict[str, Any], argv: list[str]) -> None:
     config.setdefault("dataset_config", {})
 
     scene_info = _validate_source(config)
+    source_dir = _as_abs_path(config["dataset"]["source_dir"])
+    language_annotation_path = source_dir / "language_annotation.json"
+    language_annotation = _load_json(language_annotation_path) if language_annotation_path.exists() else None
     dataset = _create_empty_dataset(config)
 
-    for episode_idx in tqdm.tqdm(range(int(config["dataset"]["episodes"])), desc=f"Converting {config['dataset']['repo_id']}"):
-        _populate_episode(dataset, config, episode_idx, scene_info)
+    for episode_idx in tqdm.tqdm(
+        range(int(config["dataset"]["episodes"])), desc=f"Converting {config['dataset']['repo_id']}"
+    ):
+        _populate_episode(dataset, config, episode_idx, scene_info, language_annotation)
 
     dataset_path = Path(HF_LEROBOT_HOME) / config["dataset"]["repo_id"]
     rmbench_meta_dir = dataset_path / "meta" / "rmbench"
@@ -594,7 +672,7 @@ def parse_args(argv: list[str] | None = None) -> tuple[dict[str, Any], list[str]
         "config_path": args.config,
         "overrides": overrides,
     }
-    return config, [os.path.basename(__file__), *(argv if argv is not None else os.sys.argv[1:])]
+    return config, [Path(__file__).name, *(argv if argv is not None else sys.argv[1:])]
 
 
 if __name__ == "__main__":

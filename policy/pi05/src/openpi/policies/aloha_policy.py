@@ -102,6 +102,37 @@ class AlohaOutputs(transforms.DataTransformFn):
 
 
 @dataclasses.dataclass(frozen=True)
+class KeyStateTokenAlohaInputs(transforms.DataTransformFn):
+    """ALOHA inputs with discrete key-state sidecars and optional hard guard targets."""
+
+    adapt_to_pi: bool = True
+    hard_action_boundary: bool = False
+    EXPECTED_CAMERAS: ClassVar[tuple[str, ...]] = AlohaInputs.EXPECTED_CAMERAS
+
+    def __call__(self, data: dict) -> dict:
+        # Reuse the standard robot/image conversion; key-state values never enter
+        # continuous state or action normalization.
+        standard = AlohaInputs(adapt_to_pi=self.adapt_to_pi)(data)
+        standard["key_state_input_ids"] = np.asarray(data.get("key_state_input_ids", [0, 0, 0]), dtype=np.int32)
+        if "actions" in data:
+            for key in ("key_state_target_ids", "key_state_target_mask"):
+                if key not in data:
+                    raise ValueError(f"structured key-state dataset is missing {key}")
+            standard["key_state_target_ids"] = np.asarray(data["key_state_target_ids"], dtype=np.int32)
+            standard["key_state_target_mask"] = np.asarray(data["key_state_target_mask"], dtype=np.bool_)
+
+        if self.hard_action_boundary and "actions" in standard:
+            if "key_state_guard_offset" not in data:
+                raise ValueError("hard action boundary requires key_state_guard_offset")
+            offset = int(np.asarray(data["key_state_guard_offset"]).reshape(-1)[0])
+            actions = np.array(standard["actions"], copy=True)
+            if 0 < offset < actions.shape[0]:
+                actions[offset:] = actions[offset - 1]
+            standard["actions"] = actions
+        return standard
+
+
+@dataclasses.dataclass(frozen=True)
 class KeyStateAlohaInputs(transforms.DataTransformFn):
     """Aloha inputs that preserve key-state dimensions after the first 14 robot dims."""
 

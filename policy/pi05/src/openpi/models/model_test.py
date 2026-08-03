@@ -1,3 +1,5 @@
+import dataclasses
+
 from flax import nnx
 import jax
 import jax.numpy as jnp
@@ -24,6 +26,28 @@ def test_observation_accepts_state_history():
 
     assert processed.state.shape == (batch_size, 4, 32)
     assert all(mask.shape == (batch_size,) for mask in processed.image_masks.values())
+
+
+def test_observation_key_state_sidecars_round_trip_and_none_compatibility():
+    image = jnp.zeros((1, 224, 224, 3), dtype=jnp.float32)
+    observation = _model.Observation(
+        images={key: image for key in _model.IMAGE_KEYS},
+        image_masks={},
+        state=jnp.zeros((1, 14), dtype=jnp.float32),
+        key_state_input_ids=jnp.asarray([[0, 0, 0]], dtype=jnp.int32),
+        key_state_target_ids=jnp.asarray([[0, 1, 0]], dtype=jnp.int32),
+        key_state_target_mask=jnp.ones((1, 3), dtype=jnp.bool_),
+    )
+    restored = _model.Observation.from_dict(observation.to_dict())
+    assert restored.key_state_target_ids.tolist() == [[0, 1, 0]]
+
+    legacy = dataclasses.replace(
+        observation,
+        key_state_input_ids=None,
+        key_state_target_ids=None,
+        key_state_target_mask=None,
+    )
+    assert "key_state_input_ids" not in legacy.to_dict()
 
 
 def test_pi0_model():

@@ -11,3 +11,15 @@ def test_pi05_prop_history_config():
     assert config.model.state_sequence_length == 4
     assert config.model.state_sequence_current_index == 3
     assert config.model.pi05_state_sequence_in_suffix
+
+
+def test_rearrange_state_token_ablation_uses_one_shared_config():
+    config = _config.get_config("pi05_rearrange_state_token_boundary_ablation")
+
+    assert config.batch_size == 32
+    assert config.num_train_steps == 30_000
+    assert config.model.key_state_token_mode == "parallel"
+    assert not config.data.hard_action_boundary
+    assert config.data.assets.asset_id == "rearrange_blocks_state_token"
+    assert config.policy_metadata["batch_id"] == config.name
+    assert config.policy_metadata["serial_train_conditioning"] == "teacher_forcing"

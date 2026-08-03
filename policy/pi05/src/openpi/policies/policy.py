@@ -63,12 +63,23 @@ class Policy(BasePolicy):
             # JAX model setup
             self._sample_actions = nnx_utils.module_jit(model.sample_actions)
             self._rng = rng or jax.random.key(0)
+            self._key_state_token_enabled = getattr(model, "key_state_token_mode", "disabled") != "disabled"
+            if self._key_state_token_enabled:
+                self._sample_actions_with_key_state = nnx_utils.module_jit(model.sample_actions_with_key_state)
+                self._key_state_previous = np.asarray([0, 0, 0], dtype=np.int32)
+
+    @override
+    def reset(self) -> None:
+        if getattr(self, "_key_state_token_enabled", False):
+            self._key_state_previous = np.asarray([0, 0, 0], dtype=np.int32)
 
     @override
     def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         inputs = self._input_transform(inputs)
+        if getattr(self, "_key_state_token_enabled", False):
+            inputs["key_state_input_ids"] = self._key_state_previous
         if not self._is_pytorch_model:
             # Make a batch and convert to jax.Array.
             inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
@@ -89,10 +100,18 @@ class Policy(BasePolicy):
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
-        outputs = {
-            "state": inputs["state"],
-            "actions": self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs),
-        }
+        key_state_diagnostics = None
+        if getattr(self, "_key_state_token_enabled", False):
+            actions, key_state_ids, key_state_logits = self._sample_actions_with_key_state(
+                sample_rng_or_pytorch_device, observation, **sample_kwargs
+            )
+            outputs = {"state": inputs["state"], "actions": actions}
+            key_state_diagnostics = (key_state_ids, key_state_logits)
+        else:
+            outputs = {
+                "state": inputs["state"],
+                "actions": self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs),
+            }
         model_time = time.monotonic() - start_time
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
@@ -100,6 +119,11 @@ class Policy(BasePolicy):
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
         outputs = self._output_transform(outputs)
+        if key_state_diagnostics is not None:
+            key_state_ids, key_state_logits = key_state_diagnostics
+            self._key_state_previous = np.asarray(key_state_ids[0, ...], dtype=np.int32)
+            outputs["key_state"] = self._key_state_previous.copy()
+            outputs["key_state_logits"] = np.asarray(key_state_logits[0, ...])
         outputs["policy_timing"] = {
             "infer_ms": model_time * 1000,
         }

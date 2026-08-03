@@ -1,5 +1,7 @@
 import flax.nnx as nnx
 import jax
+import jax.numpy as jnp
+import pytest
 
 import openpi.models.pi0_config as _pi0_config
 
@@ -44,3 +46,48 @@ def test_pi0_all_lora():
     assert len(state) == 17
     assert all("lora" not in p for p in state)
     assert all("llm" in p for p in state)
+
+
+def _dummy_state_token_config(mode: str) -> _pi0_config.Pi0Config:
+    return _pi0_config.Pi0Config(
+        pi05=True,
+        paligemma_variant="dummy",
+        action_expert_variant="dummy",
+        action_dim=14,
+        max_token_len=8,
+        key_state_token_mode=mode,
+    )
+
+
+def test_disabled_config_has_no_key_state_params():
+    config = _pi0_config.Pi0Config(
+        pi05=True,
+        paligemma_variant="dummy",
+        action_expert_variant="dummy",
+    )
+    state = nnx.state(config.create(jax.random.key(0))).flat_state()
+    assert all("key_state_token" not in "/".join(path) for path in state)
+
+
+@pytest.mark.parametrize("mode", ["parallel", "serial"])
+def test_key_state_token_loss_and_rollout(mode):
+    config = _dummy_state_token_config(mode)
+    model = config.create(jax.random.key(0))
+    observation = config.fake_obs(batch_size=2)
+    actions = config.fake_act(batch_size=2)
+
+    loss = model.compute_loss(jax.random.key(1), observation, actions)
+    sampled, state_ids, logits = model.sample_actions_with_key_state(jax.random.key(2), observation, num_steps=2)
+
+    assert loss.shape == (2, config.action_horizon)
+    assert sampled.shape == (2, config.action_horizon, config.action_dim)
+    assert state_ids.shape == (2, 3)
+    assert logits.shape == (2, 3, 3)
+
+
+def test_key_state_transition_mask():
+    model = _dummy_state_token_config("parallel").create(jax.random.key(0))
+    logits = jnp.asarray([[[0.0, 2.0, 100.0], [0.0, 3.0, 2.0], [100.0, 2.0, 1.0]]])
+    previous = jnp.asarray([[0, 0, 0]], dtype=jnp.int32)
+    # P0 cannot skip to P2; entering P1 forces button=unconfirmed.
+    assert model._select_key_state(logits, previous).tolist() == [[1, 1, 1]]  # noqa: SLF001
