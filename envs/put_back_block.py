@@ -73,6 +73,9 @@ class put_back_block(Base_Task):
         self.target_pose = self.mat_lst[block_id].get_pose().p
         self.center_pose = [0.1,-0.1,0.765,1,0,0,0]
         self.stage_id = 0
+        self._diagnostic_center_ever_ready = False
+        self._diagnostic_origin_return_ever_ready = False
+        self._diagnostic_min_button_value = 0.0
 
     @staticmethod
     def _vec_to_list(vec):
@@ -194,13 +197,86 @@ class put_back_block(Base_Task):
             self.press_flag = False
     
     def update_press_success(self):
-        if self.check_button_pressed(self.button) and not self.press_flag:
+        button_value = float(self.get_current_button_value("button"))
+        self._diagnostic_min_button_value = min(
+            self._diagnostic_min_button_value,
+            button_value,
+        )
+        if button_value < -0.005 and not self.press_flag:
             self.press_flag = True
             self.press_cnt += 1
+            snapshot = self._get_put_back_diagnostic_snapshot()
+            self._record_eval_diagnostic_event(
+                "button_pressed",
+                press_count=self.press_cnt,
+                stage_id=self.stage_id,
+                conditions=snapshot["conditions"],
+                metrics=snapshot["metrics"],
+            )
 
     def check_block_in_center(self):
         block_pose = self.block.get_pose().p
         return np.abs(block_pose[0] - self.center_pose[0]) < 0.04 and np.abs(block_pose[1] - self.center_pose[1]) < 0.04 and block_pose[2] < 0.77
+
+    def _get_put_back_diagnostic_snapshot(self):
+        block_pose = self.block.get_pose().p
+        center_dx = float(np.abs(block_pose[0] - self.center_pose[0]))
+        center_dy = float(np.abs(block_pose[1] - self.center_pose[1]))
+        origin_dx = float(np.abs(block_pose[0] - self.target_pose[0]))
+        origin_dy = float(np.abs(block_pose[1] - self.target_pose[1]))
+        button_value = float(self.get_current_button_value("button"))
+
+        conditions = {
+            "block_in_center_xy": center_dx < 0.04 and center_dy < 0.04,
+            "block_below_height_limit": bool(block_pose[2] < 0.77),
+            "block_on_origin_mat_xy": origin_dx < 0.03 and origin_dy < 0.03,
+            "right_gripper_open": bool(self.is_right_gripper_open()),
+            "button_latched_pressed": bool(self.press_flag),
+        }
+        conditions["center_ready"] = bool(
+            conditions["block_in_center_xy"]
+            and conditions["block_below_height_limit"]
+        )
+        conditions["origin_return_ready"] = bool(
+            conditions["block_on_origin_mat_xy"]
+            and conditions["block_below_height_limit"]
+            and conditions["right_gripper_open"]
+            and not conditions["button_latched_pressed"]
+        )
+        return {
+            "conditions": conditions,
+            "metrics": {
+                "button_joint_position": button_value,
+                "block_center_dx": center_dx,
+                "block_center_dy": center_dy,
+                "block_origin_dx": origin_dx,
+                "block_origin_dy": origin_dy,
+                "block_z": float(block_pose[2]),
+            },
+        }
+
+    def _update_put_back_diagnostic_progress(self, snapshot):
+        conditions = snapshot["conditions"]
+        if conditions["center_ready"] and not self._diagnostic_center_ever_ready:
+            self._diagnostic_center_ever_ready = True
+            self._record_eval_diagnostic_event(
+                "center_ready",
+                stage_id=self.stage_id,
+                conditions=conditions,
+                metrics=snapshot["metrics"],
+            )
+        if (
+            self.stage_id >= 1
+            and conditions["origin_return_ready"]
+            and not self._diagnostic_origin_return_ever_ready
+        ):
+            self._diagnostic_origin_return_ever_ready = True
+            self._record_eval_diagnostic_event(
+                "origin_return_ready",
+                stage_id=self.stage_id,
+                conditions=conditions,
+                metrics=snapshot["metrics"],
+            )
 
     def check_success(self):
         if self.stage_id == 2:
@@ -210,14 +286,103 @@ class put_back_block(Base_Task):
         self.update_press_success()
         self.set_button_unpressed(self.button, target=min(0.0, self.get_current_button_value("button")+0.002))
 
+        snapshot = self._get_put_back_diagnostic_snapshot()
+        self._update_put_back_diagnostic_progress(snapshot)
+        conditions = snapshot["conditions"]
+
         if self.press_flag:
-            if self.stage_id == 0 and self.press_cnt == 1 and self.check_block_in_center():
+            if self.stage_id == 0 and self.press_cnt == 1 and conditions["center_ready"]:
                 self.stage_id = 1
+                self._record_eval_diagnostic_event(
+                    "stage_transition",
+                    from_stage=0,
+                    to_stage=1,
+                    conditions=conditions,
+                    metrics=snapshot["metrics"],
+                )
             return False
         else:
-            if self.stage_id == 1 and self.is_right_gripper_open() and np.abs(self.block.get_pose().p[0] - self.target_pose[0]) < 0.03 \
-                and np.abs(self.block.get_pose().p[1] - self.target_pose[1]) < 0.03 and self.block.get_pose().p[2] < 0.77 and self.is_right_gripper_open():
+            if self.stage_id == 1 and conditions["origin_return_ready"]:
                 self.stage_id = 2
                 self.max_reward = max(self.max_reward, 1.0)
+                self._record_eval_diagnostic_event(
+                    "stage_transition",
+                    from_stage=1,
+                    to_stage=2,
+                    conditions=conditions,
+                    metrics=snapshot["metrics"],
+                )
                 return True
             return False
+
+    def _get_primary_failure_reason(self, success, terminal, first_press):
+        if success:
+            return "success"
+        if self.stage_id == 0:
+            if self.press_cnt == 0:
+                if not self._diagnostic_center_ever_ready:
+                    return "block_not_moved_to_center"
+                if self._diagnostic_min_button_value < -0.001:
+                    return "button_press_insufficient"
+                return "button_not_pressed_after_center"
+
+            first_press_conditions = first_press.get("conditions", {}) if first_press else {}
+            if not first_press_conditions.get("block_in_center_xy", False):
+                return "pressed_before_block_centered"
+            if not first_press_conditions.get("block_below_height_limit", False):
+                return "pressed_while_block_held"
+            if self.press_cnt > 1:
+                return "button_pressed_multiple_times_after_invalid_press"
+            return "invalid_first_press"
+
+        terminal_conditions = terminal["conditions"]
+        if terminal_conditions["button_latched_pressed"]:
+            return "button_not_released"
+        if not terminal_conditions["block_on_origin_mat_xy"]:
+            return "block_not_returned_to_origin_mat"
+        if not terminal_conditions["block_below_height_limit"]:
+            return "block_held_above_origin_mat"
+        if not terminal_conditions["right_gripper_open"]:
+            return "block_not_released_at_origin_mat"
+        return "final_conditions_not_confirmed"
+
+    def get_eval_diagnostics(self, success):
+        diagnostics = super().get_eval_diagnostics(success)
+        terminal = self._get_put_back_diagnostic_snapshot()
+        events = getattr(self, "_eval_diagnostic_events", [])
+        first_press = next(
+            (
+                event
+                for event in events
+                if event.get("name") == "button_pressed" and event.get("press_count") == 1
+            ),
+            None,
+        )
+        first_press_conditions = first_press.get("conditions", {}) if first_press else {}
+
+        diagnostics["primary_failure_reason"] = self._get_primary_failure_reason(
+            bool(success), terminal, first_press
+        )
+        diagnostics["conditions"] = {
+            "center_ever_ready": bool(self._diagnostic_center_ever_ready),
+            "button_pressed_at_least_once": self.press_cnt > 0,
+            "button_pressed_exactly_once": self.press_cnt == 1,
+            "valid_press_reached_stage_1": self.stage_id >= 1,
+            "origin_return_ever_ready": bool(self._diagnostic_origin_return_ever_ready),
+            "first_press_block_in_center": first_press_conditions.get("block_in_center_xy"),
+            "first_press_block_below_height_limit": first_press_conditions.get("block_below_height_limit"),
+            "terminal_block_on_origin_mat": terminal["conditions"]["block_on_origin_mat_xy"],
+            "terminal_block_below_height_limit": terminal["conditions"]["block_below_height_limit"],
+            "terminal_right_gripper_open": terminal["conditions"]["right_gripper_open"],
+            "terminal_button_released": not terminal["conditions"]["button_latched_pressed"],
+        }
+        diagnostics["metrics"].update({
+            "press_count": int(self.press_cnt),
+            "stage_id": int(self.stage_id),
+            "minimum_button_joint_position": float(self._diagnostic_min_button_value),
+            **terminal["metrics"],
+        })
+        diagnostics["task_context"] = {
+            "origin_mat": self.mat_name,
+        }
+        return diagnostics

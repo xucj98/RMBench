@@ -89,3 +89,26 @@ eval_result/pi05_full_key_state_with_prop_history/<task>@ckpt30k
 ```
 
 训练于 2026-08-02 启动，当前尚未启动评测；训练完成后补充评测命令和结果摘要。
+
+### Prop-history 时序审计
+
+训练和评测统一使用从旧到新的 4 帧 state sequence：
+
+```text
+[s(t-3), s(t-2), s(t-1), s(t)]
+```
+
+训练侧由 LeRobot `delta_timestamps=[-3, -2, -1, 0] / fps` 取样，episode 起点的
+负时间索引 clip 到第 0 帧。评测侧在首次 query 用当前 state 填满 4 个位置；chunk
+执行时，每执行一个 `a(t) -> s(t+1)`，先用该 action 更新 key state，再 append
+post-action proprio state。chunk 最后一步的 post-action state 由下一次 outer query
+append，且 chunk 内不会提前 append，因此不会遗漏或重复。
+
+例如执行 50 步后，下一次 query 的输入为：
+
+```text
+[s(t+47), s(t+48), s(t+49), s(t+50)]
+```
+
+这与训练侧在 frame `t+50` 的取样完全一致。图像仍只使用 query 时刻的当前帧；chunk
+内更新 observation window 只是维护 proprio history，不额外引入图像历史。
