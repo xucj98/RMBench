@@ -2,8 +2,8 @@ import dataclasses
 import functools
 import logging
 import os
-import platform
 import pathlib
+import platform
 import shlex
 import shutil
 import subprocess
@@ -34,7 +34,6 @@ import openpi.training.sharding as sharding
 import openpi.training.utils as training_utils
 import openpi.training.weight_loaders as _weight_loaders
 
-
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[3]
 RMBENCH_META_FILES = [
     "key_state_config.yaml",
@@ -55,7 +54,6 @@ def init_logging():
     }
 
     class CustomFormatter(logging.Formatter):
-
         def format(self, record):
             record.levelname = level_mapping.get(record.levelname, record.levelname)
             return super().format(record)
@@ -82,16 +80,27 @@ def init_wandb(
         return
 
     ckpt_dir = config.checkpoint_dir
+    batch_id = config.policy_metadata.get("batch_id") if config.policy_metadata is not None else None
+    run_group = os.environ.get("WANDB_RUN_GROUP", batch_id)
+    job_type = os.environ.get("WANDB_JOB_TYPE", "train")
     if not ckpt_dir.exists():
         raise FileNotFoundError(f"Checkpoint directory {ckpt_dir} does not exist.")
     if resuming:
         run_id = (ckpt_dir / "wandb_id.txt").read_text().strip()
-        wandb.init(id=run_id, resume="must", project=config.project_name)
+        wandb.init(
+            id=run_id,
+            resume="must",
+            project=config.project_name,
+            group=run_group,
+            job_type=job_type,
+        )
     else:
         wandb.init(
             name=config.exp_name,
             config=dataclasses.asdict(config),
             project=config.project_name,
+            group=run_group,
+            job_type=job_type,
         )
         (ckpt_dir / "wandb_id.txt").write_text(wandb.run.id)
 
@@ -121,7 +130,7 @@ def _git_status() -> str:
         ).strip()
     except Exception:
         return "unknown"
-    return "clean" if not status else status
+    return status if status else "clean"
 
 
 def _runtime_env() -> dict[str, str]:
@@ -136,9 +145,9 @@ def _to_yaml_safe(value: Any) -> Any:
         return str(value)
     if isinstance(value, dict):
         return {str(key): _to_yaml_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [_to_yaml_safe(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str | int | float | bool) or value is None:
         return value
     return repr(value)
 
@@ -195,10 +204,9 @@ def _load_weights_and_validate(loader: _weight_loaders.WeightLoader, params_shap
     at.check_pytree_equality(expected=params_shape, got=loaded_params, check_shapes=True, check_dtypes=True)
 
     # Remove jax.ShapeDtypeStruct from the loaded params. This makes sure that only the loaded params are returned.
-    return traverse_util.unflatten_dict({
-        k: v
-        for k, v in traverse_util.flatten_dict(loaded_params).items() if not isinstance(v, jax.ShapeDtypeStruct)
-    })
+    return traverse_util.unflatten_dict(
+        {k: v for k, v in traverse_util.flatten_dict(loaded_params).items() if not isinstance(v, jax.ShapeDtypeStruct)}
+    )
 
 
 @at.typecheck
@@ -253,7 +261,7 @@ def init_train_state(
     # Initialize the train state and mix in the partial params.
     train_state = jax.jit(
         init,
-        donate_argnums=(1, ),  # donate the partial params buffer.
+        donate_argnums=(1,),  # donate the partial params buffer.
         in_shardings=replicated_sharding,
         out_shardings=state_sharding,
     )(init_rng, partial_params)
@@ -330,7 +338,8 @@ def main(config: _config.TrainConfig):
 
     if config.batch_size % jax.device_count() != 0:
         raise ValueError(
-            f"Batch size {config.batch_size} must be divisible by the number of devices {jax.device_count()}.")
+            f"Batch size {config.batch_size} must be divisible by the number of devices {jax.device_count()}."
+        )
 
     jax.config.update("jax_compilation_cache_dir", str(epath.Path("~/.cache/jax").expanduser()))
 
@@ -372,7 +381,7 @@ def main(config: _config.TrainConfig):
         functools.partial(train_step, config),
         in_shardings=(replicated_sharding, train_state_sharding, data_sharding),
         out_shardings=(train_state_sharding, replicated_sharding),
-        donate_argnums=(1, ),
+        donate_argnums=(1,),
     )
 
     start_step = int(train_state.step)
