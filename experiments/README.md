@@ -9,13 +9,13 @@
 | Task | Paper DP | Paper Mem-0 | Paper Pi0.5 | Repro DP | dp_key_state | Repro Mem-0 | pi0_lora | pi0_full | pi05_full | pi0_lora_key_state | pi0_full_key_state | pi05_full_key_state @20k | @30k | @40k |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `observe_and_pickup` | 1% | 4% | 9% | 2% |  | 4% | 4% |  |  |  |  |  |  |  |
-| `rearrange_blocks` | 0% | 89% | 13% | 0% | running | 0% | 1% | 21% | 20% | 3% | 37% | 30% | 44% | 41% |
-| `put_back_block` | 0% | 90% | 11% | 0% | running |  | 7% |  |  | 55% | 68% | 65% | 59% | 60% |
-| `swap_blocks` | 11% | 67% | 24% | 15% | running |  | 16% |  | 14% | 44% |  | 86% | 84% | 93% |
+| `rearrange_blocks` | 0% | 89% | 13% | 0% | 0% | 0% | 1% | 21% | 20% | 3% | 37% | 30% | 44% | 41% |
+| `put_back_block` | 0% | 90% | 11% | 0% | 0% |  | 7% |  |  | 55% | 68% | 65% | 59% | 60% |
+| `swap_blocks` | 11% | 67% | 24% | 15% | 0% |  | 16% |  | 14% | 44% |  | 86% | 84% | 93% |
 | `swap_T` | 20% | 14% | 15% | 11% |  |  | 13% |  |  |  |  |  |  |  |
-| `battery_try` | 10% | 28% | 16% | 13% | running |  | 8% | 13% | 17% | 15% |  | 33% | 32% | 34% |
+| `battery_try` | 10% | 28% | 16% | 13% | 4% |  | 8% | 13% | 17% | 15% |  | 33% | 32% | 34% |
 | `blocks_ranking_try` | 10% | 18% | 6% | 3% |  |  | 16% |  |  |  |  |  |  |  |
-| `cover_blocks` | 0% | 68% | 0% | 0% | running |  | 1% |  |  | 0% |  | 10% | 23% | 15% |
+| `cover_blocks` | 0% | 68% | 0% | 0% | 0% |  | 1% |  |  | 0% |  | 10% | 23% | 15% |
 | `press_button` | 0% | 0% | 0% | 0% |  |  | 3% |  |  |  |  |  |  |  |
 
 ## 实验索引
@@ -40,11 +40,11 @@ metadata、`command.txt`、`config.yaml` 以及 W&B 记录为准。
 | `dp_reproduction` | `press_button` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/press_button-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/press_button` |
 | `dp_reproduction` | `blocks_ranking_try` | 3/100 = 3% | finished | finished | `policy/DP/checkpoints/blocks_ranking_try-demo_clean-50-0/600.ckpt` | `eval_result/dp_reproduction/blocks_ranking_try` |
 |  |  |  |  |  |  |  |
-| `dp_key_state` | `put_back_block` | - | finished | running | `policy/DP/checkpoints/put_back_block-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/put_back_block` |
-| `dp_key_state` | `rearrange_blocks` | - | finished | running | `policy/DP/checkpoints/rearrange_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/rearrange_blocks` |
-| `dp_key_state` | `swap_blocks` | - | finished | running | `policy/DP/checkpoints/swap_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/swap_blocks` |
-| `dp_key_state` | `battery_try` | - | finished | running | `policy/DP/checkpoints/battery_try-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/battery_try` |
-| `dp_key_state` | `cover_blocks` | - | finished | running | `policy/DP/checkpoints/cover_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/cover_blocks` |
+| `dp_key_state` | `put_back_block` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/put_back_block-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/put_back_block` |
+| `dp_key_state` | `rearrange_blocks` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/rearrange_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/rearrange_blocks` |
+| `dp_key_state` | `swap_blocks` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/swap_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/swap_blocks` |
+| `dp_key_state` | `battery_try` | 4/100 = 4% | finished | finished | `policy/DP/checkpoints/battery_try-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/battery_try` |
+| `dp_key_state` | `cover_blocks` | 0/100 = 0% | finished | finished | `policy/DP/checkpoints/cover_blocks-demo_clean_state_key_state-50-0/600.ckpt` | `eval_result/dp_key_state/cover_blocks` |
 |  |  |  |  |  |  |  |
 | `pi0_lora_baseline` | `swap_blocks` | 16/100 = 16% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/swap_blocks/30000` | `eval_result/pi0_lora_baseline/swap_blocks_raw_100_video5_20260614_pi0_baseline_100` |
 | `pi0_lora_baseline` | `swap_T` | 13/100 = 13% | finished | finished | `policy/pi05/checkpoints/pi0_lora_baseline/swap_T/30000` | `eval_result/pi0_lora_baseline/swap_T_raw_100_video5_20260614_pi0_baseline_100` |

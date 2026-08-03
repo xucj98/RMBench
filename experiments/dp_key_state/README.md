@@ -68,7 +68,7 @@ smoke 产物不进入本 README 的结果表，正式转换和训练从 clean co
 
 ## 当前状态
 
-正式 zarr 转换和训练已完成，5 个正式 eval 已启动。
+正式 zarr 转换、训练和 5 个正式 eval 均已完成。
 
 | Task | zarr frames | GPU | train | wandb | checkpoint | stdout |
 | --- | ---: | ---: | --- | --- | --- | --- |
@@ -80,13 +80,13 @@ smoke 产物不进入本 README 的结果表，正式转换和训练从 clean co
 
 正式 eval 使用 100 rollouts，前 5 个 rollout 录制 key-state overlay 视频。
 
-| Task | GPU | eval | wandb | eval result | stdout |
-| --- | ---: | --- | --- | --- | --- |
-| `put_back_block` | 3 | running | `d3icby29` | `eval_result/dp_key_state/put_back_block` | `eval_result/dp_key_state/put_back_block/stdout.log` |
-| `rearrange_blocks` | 4 | running | `77t132w4` | `eval_result/dp_key_state/rearrange_blocks` | `eval_result/dp_key_state/rearrange_blocks/stdout.log` |
-| `swap_blocks` | 5 | running | `vejjqg0l` | `eval_result/dp_key_state/swap_blocks` | `eval_result/dp_key_state/swap_blocks/stdout.log` |
-| `battery_try` | 6 | running | `a0t2i9sl` | `eval_result/dp_key_state/battery_try` | `eval_result/dp_key_state/battery_try/stdout.log` |
-| `cover_blocks` | 7 | running | `gyv9bmd3` | `eval_result/dp_key_state/cover_blocks` | `eval_result/dp_key_state/cover_blocks/stdout.log` |
+| Task | GPU | eval | success rate | wandb | eval result | stdout |
+| --- | ---: | --- | ---: | --- | --- | --- |
+| `put_back_block` | 3 | finished | 0/100 = 0% | `d3icby29` | `eval_result/dp_key_state/put_back_block` | `eval_result/dp_key_state/put_back_block/stdout.log` |
+| `rearrange_blocks` | 4 | finished | 0/100 = 0% | `77t132w4` | `eval_result/dp_key_state/rearrange_blocks` | `eval_result/dp_key_state/rearrange_blocks/stdout.log` |
+| `swap_blocks` | 5 | finished | 0/100 = 0% | `vejjqg0l` | `eval_result/dp_key_state/swap_blocks` | `eval_result/dp_key_state/swap_blocks/stdout.log` |
+| `battery_try` | 6 | finished | 4/100 = 4% | `a0t2i9sl` | `eval_result/dp_key_state/battery_try` | `eval_result/dp_key_state/battery_try/stdout.log` |
+| `cover_blocks` | 7 | finished | 0/100 = 0% | `gyv9bmd3` | `eval_result/dp_key_state/cover_blocks` | `eval_result/dp_key_state/cover_blocks/stdout.log` |
 
 每个 zarr 目录下的 `meta/rmbench/` 均包含：
 
