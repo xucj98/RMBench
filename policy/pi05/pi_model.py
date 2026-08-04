@@ -3,30 +3,15 @@
 """
 #!/usr/bin/python3
 """
-import json
-import sys
 from collections import deque
-import jax
-import numpy as np
-from pathlib import Path
-import yaml
-from openpi.models import model as _model
-from openpi.policies import aloha_policy
-from openpi.policies import policy_config as _policy_config
-from openpi.shared import download
-from openpi.training import config as _config
-from openpi.training import data_loader as _data_loader
-
-import cv2
-from PIL import Image
-
-from openpi.models import model as _model
-from openpi.policies import policy_config as _policy_config
-from openpi.shared import download
-from openpi.training import config as _config
-from openpi.training import data_loader as _data_loader
 import os
+from pathlib import Path
 
+import numpy as np
+import yaml
+
+from openpi.policies import policy_config as _policy_config
+from openpi.training import config as _config
 
 CHECKPOINT_ROOT = Path("policy/pi05/checkpoints")
 KEY_STATE_CONFIG_RELATIVE_PATH = Path("metadata/rmbench_data_meta/key_state_config.yaml")
@@ -50,6 +35,10 @@ class PI0:
 
         config = _config.get_config(self.train_config_name)
         self.policy_metadata = config.policy_metadata or {}
+        self.state_token_enabled = getattr(config.model, "key_state_token_mode", "disabled") != "disabled"
+        self.state_token_mode = getattr(config.model, "key_state_token_mode", "disabled")
+        self.state_token_schema = []
+        self.state_token_ids = None
         self.state_history_size = int(getattr(config.data, "state_history_size", 0))
         self.state_sequence_length = self.state_history_size + 1
         self.state_history = deque(maxlen=self.state_sequence_length)
@@ -58,8 +47,15 @@ class PI0:
         self.key_state_task = None
         self.key_state_schema = []
         self.key_state_config_path = self.checkpoint_run_dir / KEY_STATE_CONFIG_RELATIVE_PATH
-        self.key_state_enabled = self.key_state_config_path.exists()
-        if self.key_state_enabled:
+        self.key_state_enabled = self.key_state_config_path.exists() and not self.state_token_enabled
+        if self.state_token_enabled:
+            if not self.key_state_config_path.exists():
+                raise FileNotFoundError(
+                    f"Missing state-token metadata for checkpoint {self.checkpoint_run_dir}: "
+                    f"{self.key_state_config_path}"
+                )
+            self._load_state_token_config(self.key_state_config_path, config.model.key_state_num_values)
+        elif self.key_state_enabled:
             self._load_key_state_config(self.key_state_config_path)
         elif self._requires_key_state_metadata():
             raise FileNotFoundError(
@@ -88,6 +84,8 @@ class PI0:
         print(f"successfully set instruction:{instruction}")
 
     def reset_key_state(self):
+        if self.state_token_enabled:
+            self.state_token_ids = np.zeros(len(self.state_token_schema), dtype=np.int32)
         if not self.key_state_enabled:
             self.key_state = None
             return
@@ -95,6 +93,30 @@ class PI0:
         self.key_state = np.zeros(self.state_dim, dtype=np.float32)
         for entry in self.key_state_schema:
             self._write_key_state_value(entry, self._initial_key_state_index(entry))
+
+    def _load_state_token_config(self, path, expected_num_values):
+        with path.open("r", encoding="utf-8") as f:
+            payload = yaml.safe_load(f) or {}
+        config = payload.get("config", payload)
+        fields = (config.get("structured_state_tokens") or {}).get("fields", [])
+        if not fields:
+            raise ValueError(f"No structured_state_tokens.fields found in state-token config: {path}")
+
+        schema = []
+        for field in fields:
+            labels = list(field.get("labels", []))
+            if not labels:
+                raise ValueError(f"Missing state-token labels for field {field.get('name')!r}: {path}")
+            schema.append({"name": str(field.get("name", "state")), "labels": labels})
+
+        expected = tuple(int(value) for value in expected_num_values)
+        actual = tuple(len(field["labels"]) for field in schema)
+        if actual != expected:
+            raise ValueError(
+                f"State-token schema mismatch for {path}: metadata category counts={actual}, model={expected}"
+            )
+        self.state_token_schema = schema
+        self.key_state_task = (config.get("dataset") or {}).get("task")
 
     def _requires_key_state_metadata(self):
         values = [
@@ -118,10 +140,14 @@ class PI0:
         phase = config.get("phase")
         if phase:
             schema.append(self._normalize_key_state_entry("phase", phase, "phase"))
-        for execution in config.get("execution", []):
-            schema.append(self._normalize_key_state_entry(execution.get("name", "execution"), execution, "execution"))
-        for attr in config.get("attributes", []):
-            schema.append(self._normalize_key_state_entry(attr.get("name", "attribute"), attr, "attribute"))
+        schema.extend(
+            self._normalize_key_state_entry(execution.get("name", "execution"), execution, "execution")
+            for execution in config.get("execution", [])
+        )
+        schema.extend(
+            self._normalize_key_state_entry(attr.get("name", "attribute"), attr, "attribute")
+            for attr in config.get("attributes", [])
+        )
 
         if not schema:
             raise ValueError(f"No key-state entries found in key-state config: {path}")
@@ -239,6 +265,17 @@ class PI0:
             self._write_key_state_value(entry, next_value)
 
     def get_eval_video_overlay(self):
+        if self.state_token_enabled:
+            items = [
+                {"label": "task", "value": self.key_state_task or self.model_name},
+                {"label": "mode", "value": self.state_token_mode},
+            ]
+            for field, value in zip(self.state_token_schema, self.state_token_ids, strict=True):
+                index = int(value)
+                labels = field["labels"]
+                label = labels[index] if 0 <= index < len(labels) else f"invalid:{index}"
+                items.append({"label": field["name"], "value": f"{label} [{index}]"})
+            return {"title": "state-token", "items": items}
         if not self.key_state_enabled:
             return None
         items = [
@@ -252,10 +289,7 @@ class PI0:
                 continue
             index = self._decode_key_state_index(entry, values)
             labels = entry.get("labels", [])
-            if index < len(labels):
-                value = f"{labels[index]} [{index}]"
-            else:
-                value = str(index)
+            value = f"{labels[index]} [{index}]" if index < len(labels) else str(index)
             items.append({"label": entry["name"], "value": value})
         return {"title": "key-state", "items": items}
 
@@ -306,11 +340,20 @@ class PI0:
 
     def get_action(self):
         assert self.observation_window is not None, "update observation_window first!"
-        return self.policy.infer(self.observation_window)["actions"]
+        outputs = self.policy.infer(self.observation_window)
+        if self.state_token_enabled:
+            state_token_ids = np.asarray(outputs["key_state"], dtype=np.int32)
+            if state_token_ids.shape != (len(self.state_token_schema),):
+                raise ValueError(
+                    f"Expected {len(self.state_token_schema)} state-token IDs, got {state_token_ids.shape}"
+                )
+            self.state_token_ids = state_token_ids
+        return outputs["actions"]
 
     def reset_obsrvationwindows(self):
         self.instruction = None
         self.observation_window = None
         self.state_history.clear()
+        self.policy.reset()
         self.reset_key_state()
         print("successfully unset obs and language intruction")
