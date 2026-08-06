@@ -449,6 +449,8 @@ trainer 接受新的返回类型。`disabled` 分支不得执行 state-token los
 - 新 state-token checkpoint resume：要求 state schema、mode 和全部新增参数严格匹配；
 - checkpoint metadata 必须记录 mode、字段顺序、各字段类别表与 Serial conditioning 方式
   （本批次为 teacher forcing）；不匹配时 fail fast，禁止静默重排 category IDs；
+- eval/deploy 必须从被评测 run 的 `metadata/train_config.yaml` 恢复 `key_state_token_mode`
+  和字段类别数；共享 train config 中用于 CLI 的默认 mode 不是 Serial checkpoint 的推理依据；
 - loader 必须打印并保存所有被初始化的 missing parameter names，方便审计。
 
 #### 6.7.5 推理与 Policy API

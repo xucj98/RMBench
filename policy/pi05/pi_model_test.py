@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 import yaml
 
+from openpi.training import config as _config
 from pi_model import PI0
 
 
@@ -76,3 +77,32 @@ def test_episode_reset_reaches_state_token_policy_memory():
     np.testing.assert_array_equal(model.state_token_ids, np.asarray([0], dtype=np.int32))
     assert model.observation_window is None
     assert not model.state_history
+
+
+def test_eval_restores_state_token_mode_from_checkpoint_metadata(tmp_path):
+    run_dir = tmp_path / "serial_soft_seed42"
+    metadata_dir = run_dir / "metadata"
+    metadata_dir.mkdir(parents=True)
+    (metadata_dir / "train_config.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "pi05_rearrange_state_token_boundary_ablation",
+                "model": {
+                    "key_state_token_mode": "serial",
+                    "key_state_num_values": [3, 3, 3],
+                },
+                "policy_metadata": {"serial_train_conditioning": "teacher_forcing"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    model = PI0.__new__(PI0)
+    model.checkpoint_run_dir = run_dir
+    model.train_config_name = "pi05_rearrange_state_token_boundary_ablation"
+    shared_config = _config.get_config(model.train_config_name)
+
+    restored_config = model._load_checkpoint_train_config(shared_config)  # noqa: SLF001
+
+    assert shared_config.model.key_state_token_mode == "parallel"
+    assert restored_config.model.key_state_token_mode == "serial"
+    assert restored_config.policy_metadata["serial_train_conditioning"] == "teacher_forcing"

@@ -4,6 +4,7 @@
 #!/usr/bin/python3
 """
 from collections import deque
+import dataclasses
 import os
 from pathlib import Path
 
@@ -33,7 +34,7 @@ class PI0:
         entries = os.listdir(specified_path)
         assets_id = entries[0]
 
-        config = _config.get_config(self.train_config_name)
+        config = self._load_checkpoint_train_config(_config.get_config(self.train_config_name))
         self.policy_metadata = config.policy_metadata or {}
         self.state_token_enabled = getattr(config.model, "key_state_token_mode", "disabled") != "disabled"
         self.state_token_mode = getattr(config.model, "key_state_token_mode", "disabled")
@@ -73,6 +74,35 @@ class PI0:
         self.observation_window = None
         self.pi0_step = pi0_step
         self.reset_key_state()
+
+    def _load_checkpoint_train_config(self, config):
+        metadata_path = self.checkpoint_run_dir / "metadata" / "train_config.yaml"
+        if not metadata_path.exists():
+            return config
+
+        with metadata_path.open("r", encoding="utf-8") as f:
+            saved_config = yaml.safe_load(f) or {}
+        saved_name = saved_config.get("name")
+        if saved_name and saved_name != self.train_config_name:
+            raise ValueError(
+                f"Checkpoint train config mismatch for {metadata_path}: "
+                f"metadata={saved_name!r}, requested={self.train_config_name!r}"
+            )
+
+        saved_model = saved_config.get("model") or {}
+        saved_mode = saved_model.get("key_state_token_mode")
+        if saved_mode is None:
+            return config
+        saved_num_values = tuple(
+            int(value) for value in saved_model.get("key_state_num_values", config.model.key_state_num_values)
+        )
+        model_config = dataclasses.replace(
+            config.model,
+            key_state_token_mode=str(saved_mode),
+            key_state_num_values=saved_num_values,
+        )
+        policy_metadata = saved_config.get("policy_metadata", config.policy_metadata)
+        return dataclasses.replace(config, model=model_config, policy_metadata=policy_metadata)
 
     # set img_size
     def set_img_size(self, img_size):
