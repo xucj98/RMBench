@@ -155,6 +155,21 @@ replanning 频率与模型结构有明显交互，不能用单一 move steps 覆
     Parallel Hard: step20 出现局部峰值（27%）。
     Parallel Soft: step50 仍最好（15%）。
 
+## Eval seed1 复现
+
+为检验上述四点曲线是否依赖单一 eval seed，固定训练 checkpoint（训练 seed42、step30k），
+将 eval seed 改为1，复跑四个模型 × move steps 15/20/30/50，共16项；每项仍为100 episodes。
+结果目录使用 seed1 后缀，与 seed0 结果并存，不覆盖已有结果。
+
+    setsid bash -lc 'python script/run_job_queue.py \
+      --jobs experiments/pi05_rearrange_state_token_boundary_ablation/jobs_eval_move_steps_seed1.json \
+      --gpus 0,1,2,3,4,5,6,7 \
+      --state eval_result/pi05_rearrange_state_token_boundary_ablation/_move_steps_seed1_queue_state.json' \
+      > eval_result/pi05_rearrange_state_token_boundary_ablation/_move_steps_seed1_queue.stdout.log 2>&1 &
+
+manifest 按预计耗时从长到短排列：step15、step20、step30、step50。runner 只会在显存和利用率
+连续两次满足 exclusive 条件时启动，不会抢占不可见的外部任务。
+
 ## 状态
 
 - structured 数据转换：completed
@@ -166,3 +181,4 @@ replanning 频率与模型结构有明显交互，不能用单一 move steps 覆
 - 30k / step15 evaluation：completed（四组各 100 episodes）
 - 30k / step30 evaluation：completed（四组各 100 episodes）
 - step15/30 queue：completed（8/8 succeeded，0 failed）
+- eval seed1 replication：defined（16 jobs）
