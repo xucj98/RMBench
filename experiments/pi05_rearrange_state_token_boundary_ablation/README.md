@@ -82,12 +82,12 @@ step15/20/30/50 只改变闭环 replanning 频率，不改变训练监督和模�
 
 成功率如下。20k 只评测过两个 Parallel 变体，不纳入完整 2×2 结论。
 
-| Variant | 20k / step50 | 30k / step50 | 30k / step20 | 30k / step15 | step20 vs. step50 | step15 vs. step20 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Parallel Soft | 19% | 15% | 6% | 3% | -9 pp | -3 pp |
-| Parallel Hard | 30% | 15% | 27% | 12% | +12 pp | -15 pp |
-| Serial Soft | — | 38% | 35% | 23% | -3 pp | -12 pp |
-| Serial Hard | — | 21% | 38% | 37% | +17 pp | -1 pp |
+| Variant | 20k / step50 | 30k / step50 | 30k / step30 | 30k / step20 | 30k / step15 | 30k 最优 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Parallel Soft | 19% | 15% | 6% | 6% | 3% | step50：15% |
+| Parallel Hard | 30% | 15% | 14% | 27% | 12% | step20：27% |
+| Serial Soft | — | 38% | **64%** | 35% | 23% | step30：64% |
+| Serial Hard | — | 21% | 37% | 38% | 37% | step20：38% |
 
 step20 与 step50 使用完全相同的 100 个 episode seed。逐 episode 配对如下：
 
@@ -107,23 +107,34 @@ step15 与 step20 的逐 episode 配对为：
 | Serial Soft | 9 | 26 | 14 | 51 | 0.081 |
 | Serial Hard | 18 | 20 | 19 | 43 | 1.000 |
 
+step30 与 step50 的逐 episode 配对为：
+
+| Variant | 两者均成功 | 仅 step50 成功 | 仅 step30 成功 | 两者均失败 | exact McNemar p |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Parallel Soft | 1 | 14 | 5 | 80 | 0.064 |
+| Parallel Hard | 2 | 13 | 12 | 73 | 1.000 |
+| Serial Soft | 23 | 15 | 41 | 21 | 0.00069 |
+| Serial Hard | 8 | 13 | 29 | 50 | 0.020 |
+
 这里的 p 值是未做多重比较修正的同 seed 二项精确检验，只用于辅助判断翻转是否对称。
-step15 相比 step20，Parallel Hard 的下降具有较清楚的单项配对证据；Serial Hard 则基本
-持平。所有结论仍限于一个训练 seed。
+Serial Soft 的 step30 提升相对 step50 和 step20 都有清楚的配对证据（相对 step20：
+10 个 seed 由成功变失败、39 个由失败变成功，p=0.000038）。step15 相比 step20，
+Parallel Hard 的下降也有较清楚的单项配对证据。所有结论仍限于一个训练 seed。
 
 ### 失败模式
 
-- Hard 模型的 button_not_released 随执行步数缩短继续减少：Parallel Hard 为
-  20（step50）→ 5（step20）→ 2（step15），Serial Hard 为 21 → 0 → 0。
-  更频繁观察确实改善了按钮释放/边界过冲。
-- 但 Parallel Hard 的 first_placement_not_completed 从 step20 的 9 激增到 step15 的 38，
-  使成功率从 27% 降至 12%。15 步开始破坏前段连续抓取/放置，而不只是改善按钮边界。
-- Parallel Soft 的 button_pressed_multiple_times 为 2 → 31 → 19；step15 下重复按压仍远高于
-  step50，同时 button_not_pressed 从 step20 的 33 回升到 51，最终仅 3% 成功。
-- Serial Soft 随执行步数缩短持续下降（38% → 35% → 23%），主要瓶颈仍是
-  button_not_pressed（61 / 54 / 61）。
-- Serial Hard 对短执行 chunk 最稳健：step20 为 38%，step15 为 37%。总体上 step20 是目前
-  更好的折中点；继续缩短到 15 没有带来额外收益。
+- Serial Soft 在 step30 达到 64%，主要因为 button_not_pressed 降至 31；对应 step50/20/15
+  分别为 61/54/61。其余 step30 失败只有 first_placement_not_completed 1 次、
+  button_press_insufficient 3 次和 button_pressed_multiple_times 1 次。
+- Hard 模型缩短执行步数总体能减少 button_not_released，但不是单调提高成功率。
+  Parallel Hard 的该失败为 20（step50）/10（step30）/5（step20）/2（step15），
+  而 step15 的 first_placement_not_completed 激增到 38。step20 是更好的折中点。
+- Serial Hard 在 step15/20/30 上稳定为 37%/38%/37%，明显高于 step50 的 21%。
+  它对短 chunk 较稳健，但没有出现 Serial Soft 在 step30 的额外增益。
+- Parallel Soft 始终较差：step30 与 step20 均为 6%，step15 为 3%，step50 为 15%。
+  中短 chunk 下重复按压仍显著多于 step50。
+- 因而 move steps 的最优值依赖结构：Serial Soft 在 step30 有明显 sweet spot；
+  Serial Hard 在 step15–30 形成平台；Parallel Hard 只在 step20 有局部峰值。
 
 ## step15 / step30 追加消融
 
@@ -136,12 +147,13 @@ step15 相比 step20，Parallel Hard 的下降具有较清楚的单项配对证�
       --state eval_result/pi05_rearrange_state_token_boundary_ablation/_move_steps_15_30_queue_state.json' \
       > eval_result/pi05_rearrange_state_token_boundary_ablation/_move_steps_15_30_queue.stdout.log 2>&1 &
 
-step15 四组各 100 episodes 已完成，step30 四组正在运行。这组实验用于区分目前观察到的
-交互是 step20 的偶然点效应，还是随 replanning 频率变化的趋势。step30 完成后应把
-step15/20/30/50 四点补入上表，并优先比较：
+step15 和 step30 四组各 100 episodes 均已完成，队列 8/8 成功、0 失败。四点结果说明
+replanning 频率与模型结构有明显交互，不能用单一 move steps 覆盖所有模型：
 
-    Hard: button_not_released 是否随 move steps 缩短而持续下降。
-    Soft: button_pressed_multiple_times 是否随 move steps 缩短而持续上升。
+    Serial Soft: step30 最优（64%）。
+    Serial Hard: step15–30 基本形成平台（37%–38%）。
+    Parallel Hard: step20 出现局部峰值（27%）。
+    Parallel Soft: step50 仍最好（15%）。
 
 ## 状态
 
@@ -152,4 +164,5 @@ step15/20/30/50 四点补入上表，并优先比较：
 - 30k / step50 evaluation：completed（四组各 100 episodes）
 - 30k / step20 evaluation：completed（四组各 100 episodes）
 - 30k / step15 evaluation：completed（四组各 100 episodes）
-- 30k / step30 evaluation：running（四组并行）
+- 30k / step30 evaluation：completed（四组各 100 episodes）
+- step15/30 queue：completed（8/8 succeeded，0 failed）
