@@ -60,6 +60,29 @@ def test_state_token_metadata_category_mismatch_fails_fast(tmp_path):
         model._load_state_token_config(metadata_path, (3,))  # noqa: SLF001
 
 
+def test_state_token_metadata_can_exclude_button_field(tmp_path):
+    metadata_path = tmp_path / "key_state_config.yaml"
+    metadata_path.write_text(
+        yaml.safe_dump(
+            {
+                "structured_state_tokens": {
+                    "fields": [
+                        {"name": "phase", "labels": ["P0", "P1", "P2"]},
+                        {"name": "side", "labels": ["unknown", "left", "right"]},
+                        {"name": "button", "labels": ["NA", "unconfirmed", "confirmed"]},
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    model = PI0.__new__(PI0)
+
+    model._load_state_token_config(metadata_path, (3, 3), field_indices=(0, 1))  # noqa: SLF001
+
+    assert [field["name"] for field in model.state_token_schema] == ["phase", "side"]
+
+
 def test_episode_reset_reaches_state_token_policy_memory():
     model = PI0.__new__(PI0)
     model.instruction = "stale"

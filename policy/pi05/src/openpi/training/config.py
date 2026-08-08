@@ -336,16 +336,23 @@ class LeRobotAlohaKeyStateTokenDataConfig(LeRobotAlohaDataConfig):
     """ALOHA data with factorized state-token targets kept outside robot vectors."""
 
     hard_action_boundary: bool = False
+    key_state_field_indices: tuple[int, ...] | None = None
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         if not isinstance(model_config, pi0_config.Pi0Config) or model_config.key_state_token_mode == "disabled":
             raise ValueError("LeRobotAlohaKeyStateTokenDataConfig requires an enabled Pi0.5 key-state token model")
+        if self.key_state_field_indices is not None:
+            if len(self.key_state_field_indices) != len(model_config.key_state_num_values):
+                raise ValueError("key_state_field_indices must match model key_state_num_values")
+            if len(set(self.key_state_field_indices)) != len(self.key_state_field_indices):
+                raise ValueError("key_state_field_indices must not contain duplicates")
         data_transforms = _transforms.Group(
             inputs=[
                 aloha_policy.KeyStateTokenAlohaInputs(
                     adapt_to_pi=self.adapt_to_pi,
                     hard_action_boundary=self.hard_action_boundary,
+                    key_state_field_indices=self.key_state_field_indices,
                 )
             ],
             outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
@@ -873,6 +880,41 @@ def _pi05_rearrange_state_token_boundary_ablation_config() -> TrainConfig:
     )
 
 
+def _pi05_rearrange_state_token_no_button_ablation_config() -> TrainConfig:
+    return TrainConfig(
+        name="pi05_rearrange_state_token_no_button_ablation",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            key_state_token_mode="serial",
+            key_state_num_values=(3, 3),
+        ),
+        data=LeRobotAlohaKeyStateTokenDataConfig(
+            repo_id="rearrange_blocks_demo_clean_state_token",
+            assets=AssetsConfig(asset_id="rearrange_blocks_state_token"),
+            repack_transforms=_ROBOTWIN_ALOHA_KEY_STATE_TOKEN_REPACK,
+            hard_action_boundary=False,
+            key_state_field_indices=(0, 1),
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params",
+            missing_regex="key_state_token/.*",
+        ),
+        num_train_steps=30_000,
+        checkpoint_max_to_keep=3,
+        batch_size=32,
+        fsdp_devices=1,
+        policy_metadata={
+            "batch_id": "pi05_rearrange_state_token_boundary_ablation",
+            "key_state_schema": _REARRANGE_STATE_TOKEN_SCHEMA[:2],
+            "key_state_field_indices": [0, 1],
+            "serial_train_conditioning": "teacher_forcing",
+            "query_stride": 20,
+            "ablation": "remove_button_press_status",
+        },
+    )
+
+
 _PUT_BACK_BLOCK_KEY_STATE_SCHEMA = [
     {
         "name": "phase",
@@ -998,6 +1040,7 @@ _CONFIGS = [
     _pi05_robotwin_key_state_full_config(),
     _pi05_robotwin_key_state_prop_history_full_config(),
     _pi05_rearrange_state_token_boundary_ablation_config(),
+    _pi05_rearrange_state_token_no_button_ablation_config(),
     _pi0_robotwin_lora_baseline_config(),
     _pi0_robotwin_key_state_baseline_lora_config(),
     _pi0_robotwin_key_state_baseline_full_config(),

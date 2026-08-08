@@ -48,7 +48,7 @@ def test_pi0_all_lora():
     assert all("llm" in p for p in state)
 
 
-def _dummy_state_token_config(mode: str) -> _pi0_config.Pi0Config:
+def _dummy_state_token_config(mode: str, key_state_num_values: tuple[int, ...] = (3, 3, 3)) -> _pi0_config.Pi0Config:
     return _pi0_config.Pi0Config(
         pi05=True,
         paligemma_variant="dummy",
@@ -56,6 +56,7 @@ def _dummy_state_token_config(mode: str) -> _pi0_config.Pi0Config:
         action_dim=14,
         max_token_len=8,
         key_state_token_mode=mode,
+        key_state_num_values=key_state_num_values,
     )
 
 
@@ -83,6 +84,28 @@ def test_key_state_token_loss_and_rollout(mode):
     assert sampled.shape == (2, config.action_horizon, config.action_dim)
     assert state_ids.shape == (2, 3)
     assert logits.shape == (2, 3, 3)
+
+
+def test_two_field_serial_state_token_loss_and_rollout():
+    config = _dummy_state_token_config("serial", (3, 3))
+    model = config.create(jax.random.key(0))
+    observation = config.fake_obs(batch_size=2)
+    actions = config.fake_act(batch_size=2)
+
+    loss = model.compute_loss(jax.random.key(1), observation, actions)
+    sampled, state_ids, logits = model.sample_actions_with_key_state(jax.random.key(2), observation, num_steps=2)
+
+    assert loss.shape == (2, config.action_horizon)
+    assert sampled.shape == (2, config.action_horizon, config.action_dim)
+    assert state_ids.shape == (2, 2)
+    assert logits.shape == (2, 2, 3)
+
+
+def test_two_field_key_state_transition_mask():
+    model = _dummy_state_token_config("serial", (3, 3)).create(jax.random.key(0))
+    logits = jnp.asarray([[[0.0, 2.0, 100.0], [0.0, 3.0, 2.0]]])
+    previous = jnp.asarray([[0, 0]], dtype=jnp.int32)
+    assert model._select_key_state(logits, previous).tolist() == [[1, 1]]  # noqa: SLF001
 
 
 def test_key_state_transition_mask():

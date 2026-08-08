@@ -184,6 +184,43 @@ episodes 合并：
 在 step20 最好；Serial Hard 偏好 step15/20。绝对成功率存在明显 seed 差异，因此后续比较
 应优先报告两 seed 合计，而不是只引用 seed0。
 
+## Button state 追加消融
+
+为单独验证 `button_press_status` 是否对 Serial 的提升有贡献，追加一项严格单变量对照：
+
+| Variant | State token 字段 | Boundary | train seed | steps / bs | 主要评测 |
+| --- | --- | --- | ---: | --- | --- |
+| Serial Soft（原基线） | phase + empty_mat_side + button_press_status | Soft | 42 | 30k / 32 | step30，seed0/1：64% / 81% |
+| Serial Soft No Button | phase + empty_mat_side | Soft | 42 | 30k / 32 | step30，seed0/1，各100 episodes |
+
+No Button 继续读取同一个 `rearrange_blocks_demo_clean_state_token` LeRobot 数据集，只在训练
+transform 中选取字段索引 `(0, 1)`；机器人 state/action、action horizon 50 和 norm stats 均不变。
+两份 norm stats 的 SHA256 同为
+`9d70e8b243ce263e9adf53b7d65e18248c9ee2a0daa4647fc3fdee69adf8b9bc`。
+由于字段数从3变为2会改变 state-token 参数树，本项使用独立配置
+`pi05_rearrange_state_token_no_button_ablation`，但 `batch_id` 和 W&B group 仍归入本实验组。
+部署端按 checkpoint metadata 中的字段索引过滤原始三字段 schema，旧 checkpoint 不受影响。
+
+真实数据 batch 验收为 `key_state_input_ids/target_ids/target_mask = (32, 2)`、
+`actions = (32, 50, 32)`。独立2-step smoke 已通过；训练 manifest 只启动正式30k。
+正式评测固定 `pi0_step=30`，对 eval seed0/1 各跑100 episodes：
+
+    python script/run_job_queue.py \
+      --jobs experiments/pi05_rearrange_state_token_boundary_ablation/jobs_no_button_train.json \
+      --gpus 4 \
+      --state policy/pi05/checkpoints/pi05_rearrange_state_token_no_button_ablation/no_button_train_queue_state.json
+
+    python script/run_job_queue.py \
+      --jobs experiments/pi05_rearrange_state_token_boundary_ablation/jobs_no_button_eval.json \
+      --gpus 4,5 \
+      --state eval_result/pi05_rearrange_state_token_boundary_ablation/_no_button_eval_queue_state.json
+
+判读时优先看两 seed 合计：若 No Button 明显下降，说明 button token 提供了额外有效信息；
+若持平，说明它被 phase/视觉冗余替代；若反而上升，则更像 button 标注噪声或
+teacher-forcing 条件与部署预测条件之间的偏差。该实验不能单独证明 Serial 优势来自“梯度更强”，
+因为 Parallel 也有相同的 state CE；Serial 的结构性区别是 action loss 能通过 state-token 条件路径
+约束 state 表征。
+
 ## 状态
 
 - structured 数据转换：completed
@@ -196,3 +233,7 @@ episodes 合并：
 - 30k / step30 evaluation：completed（四组各 100 episodes）
 - step15/30 queue：completed（8/8 succeeded，0 failed）
 - eval seed1 replication：completed（16/16 succeeded，0 failed）
+- No Button implementation / tests / real batch：completed
+- No Button 2-step smoke：completed（bs=32，2/2 steps，return code 0）
+- No Button formal training：pending（seed42，bs=32，30k）
+- No Button step30 evaluation：pending（eval seed0/1，各100 episodes）

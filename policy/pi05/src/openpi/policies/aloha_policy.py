@@ -107,19 +107,40 @@ class KeyStateTokenAlohaInputs(transforms.DataTransformFn):
 
     adapt_to_pi: bool = True
     hard_action_boundary: bool = False
+    key_state_field_indices: tuple[int, ...] | None = None
     EXPECTED_CAMERAS: ClassVar[tuple[str, ...]] = AlohaInputs.EXPECTED_CAMERAS
+
+    def _select_key_state_fields(self, values, *, name: str, dtype) -> np.ndarray:
+        array = np.asarray(values, dtype=dtype)
+        if self.key_state_field_indices is None:
+            return array
+        indices = tuple(self.key_state_field_indices)
+        if array.shape[-1] == len(indices):
+            return array
+        if not indices or min(indices) < 0 or max(indices) >= array.shape[-1]:
+            raise ValueError(f"{name} has {array.shape[-1]} fields, cannot select key-state indices {indices}")
+        return array[..., list(indices)]
 
     def __call__(self, data: dict) -> dict:
         # Reuse the standard robot/image conversion; key-state values never enter
         # continuous state or action normalization.
         standard = AlohaInputs(adapt_to_pi=self.adapt_to_pi)(data)
-        standard["key_state_input_ids"] = np.asarray(data.get("key_state_input_ids", [0, 0, 0]), dtype=np.int32)
+        default_num_fields = 3 if self.key_state_field_indices is None else len(self.key_state_field_indices)
+        standard["key_state_input_ids"] = self._select_key_state_fields(
+            data.get("key_state_input_ids", np.zeros(default_num_fields, dtype=np.int32)),
+            name="key_state_input_ids",
+            dtype=np.int32,
+        )
         if "actions" in data:
             for key in ("key_state_target_ids", "key_state_target_mask"):
                 if key not in data:
                     raise ValueError(f"structured key-state dataset is missing {key}")
-            standard["key_state_target_ids"] = np.asarray(data["key_state_target_ids"], dtype=np.int32)
-            standard["key_state_target_mask"] = np.asarray(data["key_state_target_mask"], dtype=np.bool_)
+            standard["key_state_target_ids"] = self._select_key_state_fields(
+                data["key_state_target_ids"], name="key_state_target_ids", dtype=np.int32
+            )
+            standard["key_state_target_mask"] = self._select_key_state_fields(
+                data["key_state_target_mask"], name="key_state_target_mask", dtype=np.bool_
+            )
 
         if self.hard_action_boundary and "actions" in standard:
             if "key_state_guard_offset" not in data:

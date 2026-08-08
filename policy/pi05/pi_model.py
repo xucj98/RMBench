@@ -55,7 +55,11 @@ class PI0:
                     f"Missing state-token metadata for checkpoint {self.checkpoint_run_dir}: "
                     f"{self.key_state_config_path}"
                 )
-            self._load_state_token_config(self.key_state_config_path, config.model.key_state_num_values)
+            self._load_state_token_config(
+                self.key_state_config_path,
+                config.model.key_state_num_values,
+                field_indices=self.policy_metadata.get("key_state_field_indices"),
+            )
         elif self.key_state_enabled:
             self._load_key_state_config(self.key_state_config_path)
         elif self._requires_key_state_metadata():
@@ -124,13 +128,18 @@ class PI0:
         for entry in self.key_state_schema:
             self._write_key_state_value(entry, self._initial_key_state_index(entry))
 
-    def _load_state_token_config(self, path, expected_num_values):
+    def _load_state_token_config(self, path, expected_num_values, *, field_indices=None):
         with path.open("r", encoding="utf-8") as f:
             payload = yaml.safe_load(f) or {}
         config = payload.get("config", payload)
         fields = (config.get("structured_state_tokens") or {}).get("fields", [])
         if not fields:
             raise ValueError(f"No structured_state_tokens.fields found in state-token config: {path}")
+        if field_indices is not None:
+            indices = tuple(int(index) for index in field_indices)
+            if not indices or min(indices) < 0 or max(indices) >= len(fields):
+                raise ValueError(f"Invalid state-token field indices {indices} for {len(fields)} metadata fields")
+            fields = [fields[index] for index in indices]
 
         schema = []
         for field in fields:

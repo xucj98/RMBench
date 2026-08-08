@@ -23,6 +23,23 @@ def test_key_state_token_hard_boundary_repeats_last_pre_guard_action():
     np.testing.assert_array_equal(transformed["actions"][3:], np.repeat(actions[2:3], 3, axis=0))
 
 
+def test_key_state_token_fields_can_exclude_button_state():
+    data = {
+        "state": np.zeros(14, dtype=np.float32),
+        "actions": np.zeros((2, 14), dtype=np.float32),
+        "images": {"cam_high": np.zeros((3, 8, 8), dtype=np.uint8)},
+        "key_state_input_ids": np.asarray([1, 2, 2]),
+        "key_state_target_ids": np.asarray([2, 1, 2]),
+        "key_state_target_mask": np.asarray([True, False, True]),
+    }
+
+    transformed = aloha_policy.KeyStateTokenAlohaInputs(adapt_to_pi=False, key_state_field_indices=(0, 1))(data)
+
+    np.testing.assert_array_equal(transformed["key_state_input_ids"], [1, 2])
+    np.testing.assert_array_equal(transformed["key_state_target_ids"], [2, 1])
+    np.testing.assert_array_equal(transformed["key_state_target_mask"], [True, False])
+
+
 @pytest.mark.manual
 def test_infer():
     config = _config.get_config("pi0_aloha_sim")

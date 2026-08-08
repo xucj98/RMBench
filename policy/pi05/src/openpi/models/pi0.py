@@ -206,9 +206,10 @@ class Pi0(_model.BaseModel):
         return jnp.where(valid[None, ...], logits, -jnp.inf)
 
     def _select_key_state(self, logits: jax.Array, previous_ids: jax.Array) -> jax.Array:
-        """Apply the common legal-transition mask, then hard argmax each field."""
-        if len(self.key_state_num_values) != 3 or tuple(self.key_state_num_values) != (3, 3, 3):
-            raise ValueError("the first implementation requires the rearrange_blocks (3, 3, 3) schema")
+        """Apply the rearrange-blocks legal-transition mask, then hard argmax each field."""
+        schema = tuple(self.key_state_num_values)
+        if schema not in ((3, 3), (3, 3, 3)):
+            raise ValueError(f"unsupported rearrange_blocks key-state schema {schema}")
         previous_ids = jnp.asarray(previous_ids, dtype=jnp.int32)
 
         phase_legal = jnp.array([[True, True, False], [False, True, True], [False, False, True]], dtype=jnp.bool_)[
@@ -220,6 +221,8 @@ class Pi0(_model.BaseModel):
             previous_ids[:, 1]
         ]
         side = jnp.argmax(jnp.where(side_legal, logits[:, 1], -jnp.inf), axis=-1)
+        if schema == (3, 3):
+            return jnp.stack([phase, side], axis=-1).astype(jnp.int32)
 
         # button ids: NA=0, UNCONFIRMED=1, CONFIRMED=2. Outside P1,
         # force NA. Entering P1 starts unconfirmed; then confirmation latches.
