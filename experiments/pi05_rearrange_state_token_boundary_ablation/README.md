@@ -170,6 +170,20 @@ replanning 频率与模型结构有明显交互，不能用单一 move steps 覆
 manifest 按预计耗时从长到短排列：step15、step20、step30、step50。runner 只会在显存和利用率
 连续两次满足 exclusive 条件时启动，不会抢占不可见的外部任务。
 
+seed1 队列已完成16/16、0失败。下表每格为 seed0 / seed1；最后一列按两个 seed 共200
+episodes 合并：
+
+| Variant | step15 | step20 | step30 | step50 | 两 seed 合计最优 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Parallel Soft | 3% / 2% | 6% / 2% | 6% / 15% | 15% / 8% | step50：23/200（11.5%） |
+| Parallel Hard | 12% / 21% | 27% / 37% | 14% / 21% | 15% / 14% | step20：64/200（32.0%） |
+| Serial Soft | 23% / 25% | 35% / 49% | **64% / 81%** | 38% / 54% | step30：145/200（72.5%） |
+| Serial Hard | 37% / 46% | 38% / 45% | 37% / 26% | 21% / 16% | step15/20：83/200（41.5%） |
+
+两个 eval seed 的结构性结论一致：Serial Soft 的 step30 sweet spot 最强；Parallel Hard
+在 step20 最好；Serial Hard 偏好 step15/20。绝对成功率存在明显 seed 差异，因此后续比较
+应优先报告两 seed 合计，而不是只引用 seed0。
+
 ## 状态
 
 - structured 数据转换：completed
@@ -181,4 +195,4 @@ manifest 按预计耗时从长到短排列：step15、step20、step30、step50�
 - 30k / step15 evaluation：completed（四组各 100 episodes）
 - 30k / step30 evaluation：completed（四组各 100 episodes）
 - step15/30 queue：completed（8/8 succeeded，0 failed）
-- eval seed1 replication：defined（16 jobs）
+- eval seed1 replication：completed（16/16 succeeded，0 failed）
