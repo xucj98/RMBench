@@ -124,6 +124,10 @@ policy/pi05/assets/<train_config_name>/<repo_id>/norm_stats.json
 
 `norm_stats` 反映的是某个数据集在有效数据处理链路下进入模型前后的统计量，不反映 `exp_name`、GPU 或 batch size。单纯修改 batch size、GPU、运行名或补跑编号，应复用已有 assets。
 
+RMBench 默认用最多 10,000 frames 计算 norm stats，命令必须显式传入
+`--max-frames 10000`。除非用户明确要求全量统计，不要省略这个参数重复扫描完整数据集。
+同一批对照实验应使用相同的 frame 上限；实际命令和是否复用 stats 需记录在实验 README。
+
 原则上，以下变化需要重新计算 `norm_stats`：
 
 ```text

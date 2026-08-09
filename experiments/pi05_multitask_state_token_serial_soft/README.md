@@ -16,6 +16,7 @@
 - seed：42
 - action horizon：50
 - state-token query stride：20
+- norm stats：每个 repo 使用 `--max-frames 10000`
 - W&B project/group：`RMBench` / `pi05_multitask_state_token_serial_soft`
 
 ## 数据与 token schema
@@ -35,6 +36,17 @@ serial training conditioning = teacher forcing
 | swap_blocks | `swap_blocks_demo_clean_state_token` | phase, initial_empty_tray, first_origin_tray | `(4, 4, 4)` |
 | battery_try | `battery_try_demo_clean_state_token` | phase | `(4,)` |
 | cover_blocks | `cover_blocks_demo_clean_state_token` | phase, red_pos, green_pos, blue_pos | `(6, 4, 4, 4)` |
+
+正式转换使用 clean commit `fbb2db7`，四个 repo 的总帧数依次为
+17,588 / 29,920 / 32,626 / 50,904。norm stats 按项目规范显式使用
+`--max-frames 10000`；bs=32 时实际统计 312 batches，即 9,984 frames。最终 SHA256：
+
+| Task | norm_stats.json SHA256 |
+| --- | --- |
+| put_back_block | `e99a6abe7904f7c4265a56c487d97302bf32bd41fb847aad211c1f857603a729` |
+| swap_blocks | `acb30919ff4be931da9c62173959971f9944bfc6d304ee80ab09448d79f6b336` |
+| battery_try | `5ebaa98a5bf1151f9480811173cf5cd4de0a5e53ca6e123dea75a997bbb0be89` |
+| cover_blocks | `ca4cf5ffdf648b61bcfa63e40532ab285b1368ceff728efa53fafa60bd27e551` |
 
 converter 配置位于 `converter_configs/state_token_serial_soft/`。phase 在推理时只允许保持或
 前进一步；attribute 的 0 类是 unknown，可解析为任一合法值，首次变为非零后锁存。
@@ -70,7 +82,7 @@ policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_seed42/<st
 - 200 episode metadata/state-label resolution audit：completed
 - 1-episode LeRobot conversion smoke：completed（四任务）
 - real data batch：completed（bs=32，字段数 2 / 3 / 1 / 4）
-- full LeRobot conversion：pending
-- full norm stats：pending
-- 2-step train smoke：pending
+- full LeRobot conversion：completed（四任务各 50 episodes）
+- 10k-frame norm stats：completed（四任务，实际各 9,984 frames）
+- 2-step train smoke：completed（4/4 return code 0）
 - formal 30k training：pending
