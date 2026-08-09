@@ -74,6 +74,18 @@ python script/run_job_queue.py \
 policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_seed42/<step>
 ```
 
+正式训练于 2026-08-10 01:44 CST 从 clean commit `e062e2e` 启动：
+
+| Run | GPU | W&B ID | 启动状态 |
+| --- | ---: | --- | --- |
+| put_back_block_seed42 | 4 | `dduk3wcd` | running |
+| swap_blocks_seed42 | 5 | `ullelo12` | running |
+| battery_try_seed42 | 6 | `8bi475al` | running |
+| cover_blocks_seed42 | 7 | `4y08q2u8` | running |
+
+首轮检查时四个 run 均已通过模型初始化和优化 step（约 step 12–14），GPU 利用率均为
+100%，单步约 3.3–3.6 秒，预计 28–30 小时完成。
+
 ## 验证与状态
 
 - Python lint：completed
@@ -85,4 +97,4 @@ policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_seed42/<st
 - full LeRobot conversion：completed（四任务各 50 episodes）
 - 10k-frame norm stats：completed（四任务，实际各 9,984 frames）
 - 2-step train smoke：completed（4/4 return code 0）
-- formal 30k training：pending
+- formal 30k training：running（4/4，GPU4–7）
