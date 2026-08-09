@@ -68,6 +68,31 @@ policy/pi05/checkpoints/full_key_state/<exp_name>
 
 ## 评测
 
-```text
-pending
+### Rearrange-blocks 30k 复现与执行步数消融
+
+删除原30k checkpoint 后，按其 metadata 在训练 commit
+`eddfff7e9ba0a33ce07fdc3833dc3f29f5ede458` 上重训
+`rearrange_blocks_repro_eddfff7_seed42`。模型 action horizon 固定为50；这里只改变闭环中每次
+实际执行的前 N 步 `pi0_step`，不改变模型结构或训练监督。
+
+step50 已完成：eval seed0 为38/100，seed1 为46/100。追加 step15/20/30，两个 eval seed
+各100 episodes，共6项。为与 step50 严格对齐，六项从干净的共享代码快照
+`/mnt/public3/xcj/RMBench`、eval commit
+`cbfbbc1c3b4b96b80499d7c24c84b244c7600a68` 启动；数据、checkpoint、task config 和
+评测参数均不变。
+
+```bash
+python script/run_job_queue.py \
+  --jobs experiments/pi05_full_key_state/jobs_repro_move_steps_15_20_30.json \
+  --gpus 1,2,3,5,6,7 \
+  --state eval_result/pi05_full_key_state_repro/_move_steps_15_20_30_queue_state.json
 ```
+
+结果目录：
+
+```text
+eval_result/pi05_full_key_state_repro/
+  rearrange_blocks_repro_eddfff7_seed42@ckpt30k_step<N>_100ep_seed<S>/
+```
+
+状态：step50 completed；step15/20/30 running。
