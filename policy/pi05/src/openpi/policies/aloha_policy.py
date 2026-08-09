@@ -112,6 +112,10 @@ class KeyStateTokenAlohaInputs(transforms.DataTransformFn):
 
     def _select_key_state_fields(self, values, *, name: str, dtype) -> np.ndarray:
         array = np.asarray(values, dtype=dtype)
+        # Hugging Face datasets scalarize features declared with shape (1,).
+        # Restore the field axis before batching so a phase-only token remains [B, 1].
+        if array.ndim == 0:
+            array = array.reshape(1)
         if self.key_state_field_indices is None:
             return array
         indices = tuple(self.key_state_field_indices)

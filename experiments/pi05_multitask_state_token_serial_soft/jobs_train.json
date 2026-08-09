@@ -1,0 +1,36 @@
+{
+  "jobs": [
+    {
+      "name": "put_back_block_seed42",
+      "cwd": "policy/pi05",
+      "cmd": [".venv/bin/python", "scripts/train.py", "pi05_multitask_state_token_serial_soft", "--exp-name=put_back_block_seed42", "--data.repo-id=put_back_block_demo_clean_state_token", "--model.key-state-num-values", "3", "5"],
+      "env": {"PYTHONPATH": "src", "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95", "WANDB_RUN_GROUP": "pi05_multitask_state_token_serial_soft", "WANDB_JOB_TYPE": "train"},
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/put_back_block_seed42/train.stdout.log",
+      "gpu_requirements": {"placement": "exclusive", "min_free_memory_mib": 70000, "max_existing_util": 10, "stable_polls": 2}
+    },
+    {
+      "name": "swap_blocks_seed42",
+      "cwd": "policy/pi05",
+      "cmd": [".venv/bin/python", "scripts/train.py", "pi05_multitask_state_token_serial_soft", "--exp-name=swap_blocks_seed42", "--data.repo-id=swap_blocks_demo_clean_state_token", "--model.key-state-num-values", "4", "4", "4"],
+      "env": {"PYTHONPATH": "src", "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95", "WANDB_RUN_GROUP": "pi05_multitask_state_token_serial_soft", "WANDB_JOB_TYPE": "train"},
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/swap_blocks_seed42/train.stdout.log",
+      "gpu_requirements": {"placement": "exclusive", "min_free_memory_mib": 70000, "max_existing_util": 10, "stable_polls": 2}
+    },
+    {
+      "name": "battery_try_seed42",
+      "cwd": "policy/pi05",
+      "cmd": [".venv/bin/python", "scripts/train.py", "pi05_multitask_state_token_serial_soft", "--exp-name=battery_try_seed42", "--data.repo-id=battery_try_demo_clean_state_token", "--model.key-state-num-values", "4"],
+      "env": {"PYTHONPATH": "src", "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95", "WANDB_RUN_GROUP": "pi05_multitask_state_token_serial_soft", "WANDB_JOB_TYPE": "train"},
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/battery_try_seed42/train.stdout.log",
+      "gpu_requirements": {"placement": "exclusive", "min_free_memory_mib": 70000, "max_existing_util": 10, "stable_polls": 2}
+    },
+    {
+      "name": "cover_blocks_seed42",
+      "cwd": "policy/pi05",
+      "cmd": [".venv/bin/python", "scripts/train.py", "pi05_multitask_state_token_serial_soft", "--exp-name=cover_blocks_seed42", "--data.repo-id=cover_blocks_demo_clean_state_token", "--model.key-state-num-values", "6", "4", "4", "4"],
+      "env": {"PYTHONPATH": "src", "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95", "WANDB_RUN_GROUP": "pi05_multitask_state_token_serial_soft", "WANDB_JOB_TYPE": "train"},
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/cover_blocks_seed42/train.stdout.log",
+      "gpu_requirements": {"placement": "exclusive", "min_free_memory_mib": 70000, "max_existing_util": 10, "stable_polls": 2}
+    }
+  ]
+}

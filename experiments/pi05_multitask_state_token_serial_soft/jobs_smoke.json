@@ -1,0 +1,36 @@
+{
+  "jobs": [
+    {
+      "name": "put_back_block_smoke",
+      "cwd": "policy/pi05",
+      "cmd": [".venv/bin/python", "scripts/train.py", "pi05_multitask_state_token_serial_soft", "--exp-name=put_back_block_smoke", "--data.repo-id=put_back_block_demo_clean_state_token", "--model.key-state-num-values", "3", "5", "--num-train-steps=2", "--no-wandb-enabled", "--overwrite"],
+      "env": {"PYTHONPATH": "src", "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95"},
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_smoke_logs/put_back_block/train.stdout.log",
+      "gpu_requirements": {"placement": "exclusive", "min_free_memory_mib": 70000, "max_existing_util": 10, "stable_polls": 1}
+    },
+    {
+      "name": "swap_blocks_smoke",
+      "cwd": "policy/pi05",
+      "cmd": [".venv/bin/python", "scripts/train.py", "pi05_multitask_state_token_serial_soft", "--exp-name=swap_blocks_smoke", "--data.repo-id=swap_blocks_demo_clean_state_token", "--model.key-state-num-values", "4", "4", "4", "--num-train-steps=2", "--no-wandb-enabled", "--overwrite"],
+      "env": {"PYTHONPATH": "src", "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95"},
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_smoke_logs/swap_blocks/train.stdout.log",
+      "gpu_requirements": {"placement": "exclusive", "min_free_memory_mib": 70000, "max_existing_util": 10, "stable_polls": 1}
+    },
+    {
+      "name": "battery_try_smoke",
+      "cwd": "policy/pi05",
+      "cmd": [".venv/bin/python", "scripts/train.py", "pi05_multitask_state_token_serial_soft", "--exp-name=battery_try_smoke", "--data.repo-id=battery_try_demo_clean_state_token", "--model.key-state-num-values", "4", "--num-train-steps=2", "--no-wandb-enabled", "--overwrite"],
+      "env": {"PYTHONPATH": "src", "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95"},
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_smoke_logs/battery_try/train.stdout.log",
+      "gpu_requirements": {"placement": "exclusive", "min_free_memory_mib": 70000, "max_existing_util": 10, "stable_polls": 1}
+    },
+    {
+      "name": "cover_blocks_smoke",
+      "cwd": "policy/pi05",
+      "cmd": [".venv/bin/python", "scripts/train.py", "pi05_multitask_state_token_serial_soft", "--exp-name=cover_blocks_smoke", "--data.repo-id=cover_blocks_demo_clean_state_token", "--model.key-state-num-values", "6", "4", "4", "4", "--num-train-steps=2", "--no-wandb-enabled", "--overwrite"],
+      "env": {"PYTHONPATH": "src", "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95"},
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_smoke_logs/cover_blocks/train.stdout.log",
+      "gpu_requirements": {"placement": "exclusive", "min_free_memory_mib": 70000, "max_existing_util": 10, "stable_polls": 1}
+    }
+  ]
+}

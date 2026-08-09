@@ -330,6 +330,54 @@ def _attribute_indices(
     return _label_index(labels, state_value), _label_index(labels, target_value)
 
 
+def _structured_state_token_resolvers(
+    structured_config: dict[str, Any], info: dict[str, Any], total_frames: int
+) -> list[tuple[str, dict[str, Any], list[tuple[int, int, int, str]] | None]] | None:
+    fields = list(structured_config.get("fields", []))
+    if not fields:
+        raise ValueError("structured_state_tokens.fields must not be empty")
+    declarative = all(field.get("ranges") or field.get("transitions") for field in fields)
+    if not declarative:
+        field_names = [str(field.get("name", "state")) for field in fields]
+        legacy_names = ["phase", "empty_mat_side", "button_press_status"]
+        if field_names != legacy_names:
+            raise ValueError(
+                f"non-declarative structured state-token fields are supported only for {legacy_names}, got {field_names}"
+            )
+        # Backward-compatible path for the original rearrange-blocks config,
+        # whose three labels are resolved by the button-aware code below.
+        return None
+    resolvers = []
+    for field in fields:
+        name = str(field.get("name", "state"))
+        has_ranges = bool(field.get("ranges"))
+        has_transitions = bool(field.get("transitions"))
+        if has_ranges == has_transitions:
+            raise ValueError(f"structured state-token field {name!r} needs exactly one of ranges or transitions")
+        ranges = _range_labels(field, info, total_frames, name) if has_ranges else None
+        resolvers.append((name, field, ranges))
+    return resolvers
+
+
+def _structured_state_token_ids(
+    resolvers: list[tuple[str, dict[str, Any], list[tuple[int, int, int, str]] | None]],
+    info: dict[str, Any],
+    total_frames: int,
+    frame_idx: int,
+) -> np.ndarray:
+    ids = []
+    for _name, field, ranges in resolvers:
+        if ranges is not None:
+            ids.append(_label_at(frame_idx, ranges))
+        else:
+            # The target side of an acquisition transition is the semantic
+            # state predicted from the current observation. The carried input
+            # comes from this target at the previous query time.
+            _state_index, target_index = _attribute_indices(field, info, total_frames, frame_idx)
+            ids.append(target_index)
+    return np.asarray(ids, dtype=np.int64)
+
+
 def _execution_blocks(config: dict[str, Any]) -> list[dict[str, Any]]:
     execution = config.get("execution", [])
     if isinstance(execution, dict):
@@ -423,31 +471,42 @@ def _create_empty_dataset(config: dict[str, Any]) -> LeRobotDataset:
             "names": [_feature_names(config)],
         },
     }
-    if config.get("structured_state_tokens") is not None:
+    structured_config = config.get("structured_state_tokens")
+    if structured_config is not None:
+        fields = list(structured_config.get("fields", []))
+        if not fields:
+            raise ValueError("structured_state_tokens.fields must not be empty")
+        field_names = [str(field.get("name", "state")) for field in fields]
+        if len(set(field_names)) != len(field_names):
+            raise ValueError(f"structured state-token field names must be unique: {field_names}")
+        for field in fields:
+            _labels(field)
+        field_count = len(fields)
         features.update(
             {
                 "observation.key_state_input_ids": {
                     "dtype": "int64",
-                    "shape": (3,),
-                    "names": ["phase", "empty_mat_side", "button_press_status"],
+                    "shape": (field_count,),
+                    "names": field_names,
                 },
                 "observation.key_state_target_ids": {
                     "dtype": "int64",
-                    "shape": (3,),
-                    "names": ["phase", "empty_mat_side", "button_press_status"],
+                    "shape": (field_count,),
+                    "names": field_names,
                 },
                 "observation.key_state_target_mask": {
                     "dtype": "bool",
-                    "shape": (3,),
-                    "names": ["phase", "empty_mat_side", "button_press_status"],
-                },
-                "observation.key_state_guard_offset": {
-                    "dtype": "int64",
-                    "shape": (1,),
-                    "names": ["button_press_confirmed_minus_frame"],
+                    "shape": (field_count,),
+                    "names": field_names,
                 },
             }
         )
+        if "button_press_down_segment" in structured_config:
+            features["observation.key_state_guard_offset"] = {
+                "dtype": "int64",
+                "shape": (1,),
+                "names": ["button_press_confirmed_minus_frame"],
+            }
     for cam in CAMERA_MAP:
         features[f"observation.images.{cam}"] = {
             "dtype": mode,
@@ -499,24 +558,27 @@ def _populate_episode(
         total_frames = int(vector.shape[0])
         action_frames = total_frames - 1
         structured_config = config.get("structured_state_tokens")
+        structured_resolvers = None
         guard_frame = None
         if structured_config is not None:
-            if language_annotation is None:
-                raise ValueError("structured_state_tokens requires language_annotation.json")
-            segments = language_annotation[_episode_key(episode_idx)]
-            guard_segment = int(structured_config.get("button_press_down_segment", 4))
-            if len(segments) != 11 or not (0 <= guard_segment < len(segments)):
-                raise ValueError(f"Unexpected language segments for episode {episode_idx}: {len(segments)}")
-            annotated_frames = sum(int(segment[1]) for segment in segments)
-            # Language annotations count observation frames, while the converter
-            # emits N-1 transitions. Historical datasets contain both counting
-            # conventions, so accept either exact total.
-            if annotated_frames not in {action_frames, total_frames}:
-                raise ValueError(
-                    f"Language segment durations ({annotated_frames}) match neither observation frames "
-                    f"({total_frames}) nor action frames ({action_frames}) for episode {episode_idx}"
-                )
-            guard_frame = sum(int(segment[1]) for segment in segments[: guard_segment + 1])
+            structured_resolvers = _structured_state_token_resolvers(structured_config, info, total_frames)
+            if "button_press_down_segment" in structured_config:
+                if language_annotation is None:
+                    raise ValueError("button-aware structured_state_tokens requires language_annotation.json")
+                segments = language_annotation[_episode_key(episode_idx)]
+                guard_segment = int(structured_config["button_press_down_segment"])
+                if len(segments) != 11 or not (0 <= guard_segment < len(segments)):
+                    raise ValueError(f"Unexpected language segments for episode {episode_idx}: {len(segments)}")
+                annotated_frames = sum(int(segment[1]) for segment in segments)
+                # Language annotations count observation frames, while the converter
+                # emits N-1 transitions. Historical datasets contain both counting
+                # conventions, so accept either exact total.
+                if annotated_frames not in {action_frames, total_frames}:
+                    raise ValueError(
+                        f"Language segment durations ({annotated_frames}) match neither observation frames "
+                        f"({total_frames}) nor action frames ({action_frames}) for episode {episode_idx}"
+                    )
+                guard_frame = sum(int(segment[1]) for segment in segments[: guard_segment + 1])
         per_step_blocks = []
         if config.get("phase") is not None:
             per_step_blocks.append(("phase", config["phase"]))
@@ -551,8 +613,12 @@ def _populate_episode(
             }
             if structured_config is not None:
                 stride = int(structured_config.get("query_stride", 20))
+                field_count = len(structured_config["fields"])
 
                 def state_token_ids(index: int) -> np.ndarray:
+                    if structured_resolvers is not None:
+                        return _structured_state_token_ids(structured_resolvers, info, total_frames, index)
+                    # Legacy rearrange-blocks button-aware labels.
                     block1_end = int(_resolve_ref("micro_stages.block1_place.end_frame", info, total_frames))
                     press_return_end = int(_resolve_ref("micro_stages.press_return.end_frame", info, total_frames))
                     phase = 0 if index < block1_end else (1 if index < press_return_end else 2)
@@ -564,16 +630,17 @@ def _populate_episode(
                 previous_ids = (
                     state_token_ids(frame_idx - stride)
                     if frame_idx - stride >= 0
-                    else np.asarray([0, 0, 0], dtype=np.int64)
+                    else np.zeros(field_count, dtype=np.int64)
                 )
                 frame.update(
                     {
                         "observation.key_state_input_ids": previous_ids,
                         "observation.key_state_target_ids": state_token_ids(frame_idx),
-                        "observation.key_state_target_mask": np.ones(3, dtype=np.bool_),
-                        "observation.key_state_guard_offset": np.asarray([guard_frame - frame_idx], dtype=np.int64),
+                        "observation.key_state_target_mask": np.ones(field_count, dtype=np.bool_),
                     }
                 )
+                if guard_frame is not None:
+                    frame["observation.key_state_guard_offset"] = np.asarray([guard_frame - frame_idx], dtype=np.int64)
             for dst, src in CAMERA_MAP.items():
                 frame[f"observation.images.{dst}"] = _decode_image(ep[f"/observation/{src}/rgb"][frame_idx])
             dataset.add_frame(frame)

@@ -206,33 +206,39 @@ class Pi0(_model.BaseModel):
         return jnp.where(valid[None, ...], logits, -jnp.inf)
 
     def _select_key_state(self, logits: jax.Array, previous_ids: jax.Array) -> jax.Array:
-        """Apply the rearrange-blocks legal-transition mask, then hard argmax each field."""
+        """Apply monotonic-phase and latched-attribute transition masks."""
         schema = tuple(self.key_state_num_values)
-        if schema not in ((3, 3), (3, 3, 3)):
-            raise ValueError(f"unsupported rearrange_blocks key-state schema {schema}")
+        if not schema:
+            raise ValueError("key-state schema must contain at least one field")
         previous_ids = jnp.asarray(previous_ids, dtype=jnp.int32)
+        class_ids = jnp.arange(logits.shape[-1])[None, :]
 
-        phase_legal = jnp.array([[True, True, False], [False, True, True], [False, False, True]], dtype=jnp.bool_)[
-            previous_ids[:, 0]
-        ]
+        phase_size = schema[0]
+        previous_phase = previous_ids[:, 0]
+        next_phase = jnp.minimum(previous_phase + 1, phase_size - 1)
+        phase_valid = class_ids < phase_size
+        phase_legal = phase_valid & ((class_ids == previous_phase[:, None]) | (class_ids == next_phase[:, None]))
         phase = jnp.argmax(jnp.where(phase_legal, logits[:, 0], -jnp.inf), axis=-1)
+        selected = [phase]
 
-        side_legal = jnp.array([[True, True, True], [False, True, False], [False, False, True]], dtype=jnp.bool_)[
-            previous_ids[:, 1]
-        ]
-        side = jnp.argmax(jnp.where(side_legal, logits[:, 1], -jnp.inf), axis=-1)
-        if schema == (3, 3):
-            return jnp.stack([phase, side], axis=-1).astype(jnp.int32)
+        for field_index, field_size in enumerate(schema[1:], start=1):
+            if schema == (3, 3, 3) and field_index == 2:
+                # Backward-compatible rearrange button rule: entering phase 1
+                # starts unconfirmed, confirmation latches, and other phases use NA.
+                previous_button = previous_ids[:, field_index]
+                button_legal_p1 = jnp.array(
+                    [[False, True, False], [False, True, True], [False, False, True]], dtype=jnp.bool_
+                )[previous_button]
+                legal = jnp.where((phase == 1)[:, None], button_legal_p1, jnp.array([True, False, False])[None, :])
+            else:
+                previous_value = previous_ids[:, field_index]
+                valid = class_ids < field_size
+                # Attribute id 0 means unknown. It can resolve to any valid
+                # value; once nonzero, the selected value is latched.
+                legal = valid & ((previous_value == 0)[:, None] | (class_ids == previous_value[:, None]))
+            selected.append(jnp.argmax(jnp.where(legal, logits[:, field_index], -jnp.inf), axis=-1))
 
-        # button ids: NA=0, UNCONFIRMED=1, CONFIRMED=2. Outside P1,
-        # force NA. Entering P1 starts unconfirmed; then confirmation latches.
-        previous_button = previous_ids[:, 2]
-        button_legal_p1 = jnp.array([[False, True, False], [False, True, True], [False, False, True]], dtype=jnp.bool_)[
-            previous_button
-        ]
-        button_legal = jnp.where((phase == 1)[:, None], button_legal_p1, jnp.array([True, False, False])[None, :])
-        button = jnp.argmax(jnp.where(button_legal, logits[:, 2], -jnp.inf), axis=-1)
-        return jnp.stack([phase, side, button], axis=-1).astype(jnp.int32)
+        return jnp.stack(selected, axis=-1).astype(jnp.int32)
 
     def _key_state_cross_entropy(self, logits: jax.Array, obs: _model.Observation) -> jax.Array:
         targets = jnp.asarray(obs.key_state_target_ids, dtype=jnp.int32)

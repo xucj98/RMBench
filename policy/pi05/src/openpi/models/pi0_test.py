@@ -101,6 +101,39 @@ def test_two_field_serial_state_token_loss_and_rollout():
     assert logits.shape == (2, 2, 3)
 
 
+def test_four_field_serial_state_token_loss_and_rollout():
+    config = _dummy_state_token_config("serial", (6, 4, 4, 4))
+    model = config.create(jax.random.key(0))
+    observation = config.fake_obs(batch_size=2)
+    actions = config.fake_act(batch_size=2)
+
+    loss = model.compute_loss(jax.random.key(1), observation, actions)
+    sampled, state_ids, logits = model.sample_actions_with_key_state(jax.random.key(2), observation, num_steps=2)
+
+    assert loss.shape == (2, config.action_horizon)
+    assert sampled.shape == (2, config.action_horizon, config.action_dim)
+    assert state_ids.shape == (2, 4)
+    assert logits.shape == (2, 4, 6)
+
+
+def test_multitask_phase_and_attribute_transition_mask():
+    model = _dummy_state_token_config("serial", (6, 4, 4, 4)).create(jax.random.key(0))
+    logits = jnp.asarray(
+        [
+            [
+                [0.0, 5.0, 100.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 2.0, 100.0, 0.0, 0.0],
+                [0.0, 1.0, 2.0, 100.0, 0.0, 0.0],
+                [0.0, 100.0, 2.0, 3.0, 0.0, 0.0],
+            ]
+        ]
+    )
+    previous = jnp.asarray([[0, 2, 0, 3]], dtype=jnp.int32)
+
+    # Phase cannot skip; known attributes stay latched; unknown may resolve.
+    assert model._select_key_state(logits, previous).tolist() == [[1, 2, 3, 3]]  # noqa: SLF001
+
+
 def test_two_field_key_state_transition_mask():
     model = _dummy_state_token_config("serial", (3, 3)).create(jax.random.key(0))
     logits = jnp.asarray([[[0.0, 2.0, 100.0], [0.0, 3.0, 2.0]]])

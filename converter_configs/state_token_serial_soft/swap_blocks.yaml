@@ -1,0 +1,58 @@
+dataset:
+  task: swap_blocks
+  source_dir: data/swap_blocks/demo_clean_state
+  repo_id: swap_blocks_demo_clean_state_token
+  episodes: 50
+state_layout:
+  state_dim: 14
+  robot_dim: 14
+structured_state_tokens:
+  fields:
+  - name: phase
+    labels:
+    - move_first_block_to_empty_tray
+    - move_second_block_to_first_origin
+    - move_first_block_to_second_origin
+    - press_button
+    ranges:
+    - label: move_first_block_to_empty_tray
+      window:
+      - episode_start
+      - micro_stages.first_return.end_frame
+    - label: move_second_block_to_first_origin
+      window:
+      - micro_stages.first_return.end_frame
+      - micro_stages.second_return.end_frame
+    - label: move_first_block_to_second_origin
+      window:
+      - micro_stages.second_return.end_frame
+      - micro_stages.first_temp_return.end_frame
+    - label: press_button
+      window:
+      - micro_stages.first_temp_return.end_frame
+      - episode_end
+  - name: initial_empty_tray
+    labels:
+    - unknown
+    - left
+    - middle
+    - right
+    transitions:
+    - from_value: unknown
+      to_value: task_facts.initial_empty_tray
+      update_window:
+      - episode_start
+      - micro_stages.first_place.start_frame
+  - name: first_origin_tray
+    labels:
+    - unknown
+    - left
+    - middle
+    - right
+    transitions:
+    - from_value: unknown
+      to_value: task_facts.first_origin_tray
+      update_window:
+      - episode_start
+      - micro_stages.first_place.start_frame
+  query_stride: 20

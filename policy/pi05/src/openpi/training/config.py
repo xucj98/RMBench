@@ -690,6 +690,27 @@ _ROBOTWIN_ALOHA_REPACK = _transforms.Group(
     ]
 )
 
+_ROBOTWIN_ALOHA_KEY_STATE_TOKEN_SOFT_REPACK = _transforms.Group(
+    inputs=[
+        _transforms.RepackTransform(
+            {
+                "images": {
+                    "cam_high": "observation.images.cam_high",
+                    "cam_left_wrist": "observation.images.cam_left_wrist",
+                    "cam_right_wrist": "observation.images.cam_right_wrist",
+                },
+                "state": "observation.state",
+                "actions": "action",
+                "prompt": "prompt",
+                "key_state_input_ids": "observation.key_state_input_ids",
+                "key_state_target_ids": "observation.key_state_target_ids",
+                "key_state_target_mask": "observation.key_state_target_mask",
+            }
+        )
+    ]
+)
+
+
 _ROBOTWIN_ALOHA_KEY_STATE_TOKEN_REPACK = _transforms.Group(
     inputs=[
         _transforms.RepackTransform(
@@ -915,6 +936,31 @@ def _pi05_rearrange_state_token_no_button_ablation_config() -> TrainConfig:
     )
 
 
+def _pi05_multitask_state_token_serial_soft_config() -> TrainConfig:
+    return TrainConfig(
+        name="pi05_multitask_state_token_serial_soft",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            key_state_token_mode="serial",
+            key_state_num_values=(3, 5),
+        ),
+        data=LeRobotAlohaKeyStateTokenDataConfig(
+            repo_id="put_back_block_demo_clean_state_token",
+            repack_transforms=_ROBOTWIN_ALOHA_KEY_STATE_TOKEN_SOFT_REPACK,
+            hard_action_boundary=False,
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params",
+            missing_regex="key_state_token/.*",
+        ),
+        num_train_steps=30_000,
+        checkpoint_max_to_keep=3,
+        batch_size=32,
+        fsdp_devices=1,
+    )
+
+
 _PUT_BACK_BLOCK_KEY_STATE_SCHEMA = [
     {
         "name": "phase",
@@ -1041,6 +1087,7 @@ _CONFIGS = [
     _pi05_robotwin_key_state_prop_history_full_config(),
     _pi05_rearrange_state_token_boundary_ablation_config(),
     _pi05_rearrange_state_token_no_button_ablation_config(),
+    _pi05_multitask_state_token_serial_soft_config(),
     _pi0_robotwin_lora_baseline_config(),
     _pi0_robotwin_key_state_baseline_lora_config(),
     _pi0_robotwin_key_state_baseline_full_config(),

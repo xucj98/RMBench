@@ -39,3 +39,18 @@ def test_rearrange_state_token_no_button_ablation_is_strict_single_factor():
     assert not config.data.hard_action_boundary
     assert config.policy_metadata["batch_id"] == full.name
     assert config.policy_metadata["ablation"] == "remove_button_press_status"
+
+
+def test_multitask_state_token_serial_soft_uses_one_shared_config():
+    config = _config.get_config("pi05_multitask_state_token_serial_soft")
+
+    assert config.batch_size == 32
+    assert config.num_train_steps == 30_000
+    assert config.model.key_state_token_mode == "serial"
+    assert config.model.key_state_num_values == (3, 5)
+    assert config.data.repo_id == "put_back_block_demo_clean_state_token"
+    assert not config.data.hard_action_boundary
+    assert config.data.key_state_field_indices is None
+    repack_structure = config.data.repack_transforms.inputs[0].structure
+    assert "key_state_guard_offset" not in repack_structure
+    assert config.policy_metadata is None

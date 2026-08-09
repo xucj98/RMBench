@@ -23,6 +23,23 @@ def test_key_state_token_hard_boundary_repeats_last_pre_guard_action():
     np.testing.assert_array_equal(transformed["actions"][3:], np.repeat(actions[2:3], 3, axis=0))
 
 
+def test_key_state_token_single_field_restores_scalarized_feature_axis():
+    data = {
+        "state": np.zeros(14, dtype=np.float32),
+        "actions": np.zeros((2, 14), dtype=np.float32),
+        "images": {"cam_high": np.zeros((3, 8, 8), dtype=np.uint8)},
+        "key_state_input_ids": np.int64(1),
+        "key_state_target_ids": np.int64(2),
+        "key_state_target_mask": np.bool_(1),
+    }
+
+    transformed = aloha_policy.KeyStateTokenAlohaInputs(adapt_to_pi=False)(data)
+
+    assert transformed["key_state_input_ids"].shape == (1,)
+    assert transformed["key_state_target_ids"].shape == (1,)
+    assert transformed["key_state_target_mask"].shape == (1,)
+
+
 def test_key_state_token_fields_can_exclude_button_state():
     data = {
         "state": np.zeros(14, dtype=np.float32),
