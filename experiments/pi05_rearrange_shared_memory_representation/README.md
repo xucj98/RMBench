@@ -62,7 +62,7 @@ robot state/action 与原 token dataset 相同，且 token transform 会在 norm
 ```bash
 python script/run_job_queue.py \
   --jobs experiments/pi05_rearrange_shared_memory_representation/jobs_train.json \
-  --auto-gpus --exclude-gpus 0 \
+  --gpus 1,2 \
   --state policy/pi05/checkpoints/pi05_rearrange_shared_memory_representation_queue_state.json
 ```
 
