@@ -191,7 +191,7 @@ episodes 合并：
 | Variant | State token 字段 | Boundary | train seed | steps / bs | 主要评测 |
 | --- | --- | --- | ---: | --- | --- |
 | Serial Soft（原基线） | phase + empty_mat_side + button_press_status | Soft | 42 | 30k / 32 | step30，seed0/1：64% / 81% |
-| Serial Soft No Button | phase + empty_mat_side | Soft | 42 | 30k / 32 | step30，seed0/1，各100 episodes |
+| Serial Soft No Button | phase + empty_mat_side | Soft | 42 | 30k / 32 | step30/50，seed0/1，各100 episodes |
 
 No Button 继续读取同一个 `rearrange_blocks_demo_clean_state_token` LeRobot 数据集，只在训练
 transform 中选取字段索引 `(0, 1)`；机器人 state/action、action horizon 50 和 norm stats 均不变。
@@ -203,7 +203,7 @@ transform 中选取字段索引 `(0, 1)`；机器人 state/action、action horiz
 
 真实数据 batch 验收为 `key_state_input_ids/target_ids/target_mask = (32, 2)`、
 `actions = (32, 50, 32)`。独立2-step smoke 已通过；训练 manifest 只启动正式30k。
-正式评测固定 `pi0_step=30`，对 eval seed0/1 各跑100 episodes：
+正式评测比较 `pi0_step=30/50`，对 eval seed0/1 各跑100 episodes，共四项：
 
     python script/run_job_queue.py \
       --jobs experiments/pi05_rearrange_state_token_boundary_ablation/jobs_no_button_train.json \
@@ -212,7 +212,7 @@ transform 中选取字段索引 `(0, 1)`；机器人 state/action、action horiz
 
     python script/run_job_queue.py \
       --jobs experiments/pi05_rearrange_state_token_boundary_ablation/jobs_no_button_eval.json \
-      --gpus 4,5 \
+      --gpus 0,1,2,3 \
       --state eval_result/pi05_rearrange_state_token_boundary_ablation/_no_button_eval_queue_state.json
 
 判读时优先看两 seed 合计：若 No Button 明显下降，说明 button token 提供了额外有效信息；
@@ -235,5 +235,5 @@ teacher-forcing 条件与部署预测条件之间的偏差。该实验不能单�
 - eval seed1 replication：completed（16/16 succeeded，0 failed）
 - No Button implementation / tests / real batch：completed
 - No Button 2-step smoke：completed（bs=32，2/2 steps，return code 0）
-- No Button formal training：pending（seed42，bs=32，30k）
-- No Button step30 evaluation：pending（eval seed0/1，各100 episodes）
+- No Button formal training：completed（seed42，bs=32，30k；W&B `5de66onj`）
+- No Button step30/50 evaluation：pending（4 runs；eval seed0/1，各100 episodes）
