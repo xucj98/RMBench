@@ -3,8 +3,20 @@ from openpi_client import action_chunk_broker
 import pytest
 
 from openpi.policies import aloha_policy
+from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.training import config as _config
+
+
+def test_key_state_token_reset_uses_configured_field_count():
+    policy = _policy.Policy.__new__(_policy.Policy)
+    policy._key_state_token_enabled = True  # noqa: SLF001
+    policy._key_state_num_fields = 2  # noqa: SLF001
+    policy._key_state_previous = np.asarray([1, 2, 2], dtype=np.int32)  # noqa: SLF001
+
+    policy.reset()
+
+    np.testing.assert_array_equal(policy._key_state_previous, [0, 0])  # noqa: SLF001
 
 
 def test_key_state_token_hard_boundary_repeats_last_pre_guard_action():

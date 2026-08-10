@@ -66,12 +66,15 @@ class Policy(BasePolicy):
             self._key_state_token_enabled = getattr(model, "key_state_token_mode", "disabled") != "disabled"
             if self._key_state_token_enabled:
                 self._sample_actions_with_key_state = nnx_utils.module_jit(model.sample_actions_with_key_state)
-                self._key_state_previous = np.asarray([0, 0, 0], dtype=np.int32)
+                self._key_state_num_fields = len(getattr(model, "key_state_num_values", ()))
+                if self._key_state_num_fields <= 0:
+                    raise ValueError("key-state token model must define at least one field")
+                self._key_state_previous = np.zeros(self._key_state_num_fields, dtype=np.int32)
 
     @override
     def reset(self) -> None:
         if getattr(self, "_key_state_token_enabled", False):
-            self._key_state_previous = np.asarray([0, 0, 0], dtype=np.int32)
+            self._key_state_previous = np.zeros(self._key_state_num_fields, dtype=np.int32)
 
     @override
     def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
