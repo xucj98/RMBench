@@ -236,4 +236,8 @@ teacher-forcing 条件与部署预测条件之间的偏差。该实验不能单�
 - No Button implementation / tests / real batch：completed
 - No Button 2-step smoke：completed（bs=32，2/2 steps，return code 0）
 - No Button formal training：completed（seed42，bs=32，30k；W&B `5de66onj`）
-- No Button step30/50 evaluation：pending（4 runs；eval seed0/1，各100 episodes）
+- No Button step30/50 evaluation：running（2026-08-10 13:12 CST 启动；4 runs；eval seed0/1，各100 episodes）
+  - GPU0：step30 / seed0，W&B `8aq1x4ul`
+  - GPU1：step30 / seed1，W&B `fdmz4c2b`
+  - GPU2：step50 / seed0，W&B `0xqi3jwh`
+  - GPU3：step50 / seed1，W&B `w7fh2l7i`
