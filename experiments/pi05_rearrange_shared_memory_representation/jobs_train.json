@@ -19,8 +19,8 @@
         "WANDB_RUN_GROUP": "pi05_rearrange_shared_memory_representation",
         "WANDB_JOB_TYPE": "train"
       },
-      "log_path": "policy/pi05/checkpoints/pi05_full_key_state/shared_memory_full_key_state_seed0/train.stdout.log",
-      "pid_path": "policy/pi05/checkpoints/pi05_full_key_state/shared_memory_full_key_state_seed0/train.pid",
+      "log_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/shared_memory_full_key_state_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/shared_memory_full_key_state_seed0/train.pid",
       "gpu_requirements": {
         "placement": "exclusive",
         "min_free_memory_mib": 70000,
@@ -48,8 +48,8 @@
         "WANDB_RUN_GROUP": "pi05_rearrange_shared_memory_representation",
         "WANDB_JOB_TYPE": "train"
       },
-      "log_path": "policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_seed0/train.stdout.log",
-      "pid_path": "policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_seed0/train.pid",
+      "log_path": "policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/_formal_logs/shared_memory_serial_soft_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/_formal_logs/shared_memory_serial_soft_seed0/train.pid",
       "gpu_requirements": {
         "placement": "exclusive",
         "min_free_memory_mib": 70000,
