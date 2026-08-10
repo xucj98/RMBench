@@ -52,6 +52,70 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data or {}
 
 
+def _merge_memory_schema(config: dict[str, Any], config_path: Path) -> dict[str, Any]:
+    """Resolve shared memory semantics into a representation-specific converter config."""
+    schema_ref = config.get("memory_schema")
+    if schema_ref is None:
+        return config
+
+    schema_path = Path(str(schema_ref))
+    if not schema_path.is_absolute():
+        schema_path = (config_path.parent / schema_path).resolve()
+    schema = _load_yaml(schema_path)
+    fields = list(schema.get("fields", []))
+    if not fields:
+        raise ValueError(f"Memory schema has no fields: {schema_path}")
+    names = [str(field.get("name", "")) for field in fields]
+    if not all(names) or len(set(names)) != len(names):
+        raise ValueError(f"Memory schema field names must be non-empty and unique: {names}")
+
+    adapter = copy.deepcopy(config.get("memory_adapter") or {})
+    adapter_type = str(adapter.pop("type", ""))
+    field_options = adapter.pop("fields", {})
+    if not isinstance(field_options, dict):
+        raise ValueError("memory_adapter.fields must map field names to representation options")
+    unknown = set(field_options) - set(names)
+    if unknown:
+        raise ValueError(f"memory_adapter references unknown fields {sorted(unknown)} from {schema_path}")
+
+    resolved = copy.deepcopy(config)
+    resolved["semantic_memory"] = {"version": schema.get("version", 1), "fields": copy.deepcopy(fields)}
+    resolved.pop("memory_schema", None)
+    resolved.pop("memory_adapter", None)
+
+    if adapter_type in {"full_key_state", "shared"}:
+        resolved_fields = []
+        for field in fields:
+            name = str(field["name"])
+            options = copy.deepcopy(field_options.get(name) or {})
+            if not options:
+                raise ValueError(f"full_key_state adapter is missing projection options for field {name!r}")
+            item = copy.deepcopy(field)
+            item.update(options)
+            resolved_fields.append(item)
+        phase_fields = [field for field in resolved_fields if field.get("kind") == "phase"]
+        if len(phase_fields) > 1:
+            raise ValueError("full_key_state adapter supports at most one phase field")
+        if phase_fields:
+            resolved["phase"] = phase_fields[0]
+        resolved["execution"] = [field for field in resolved_fields if field.get("kind") == "execution"]
+        resolved["attributes"] = [field for field in resolved_fields if field.get("kind") == "attribute"]
+        if adapter_type == "shared":
+            state_token_options = adapter.pop("state_token", None)
+            if not isinstance(state_token_options, dict):
+                raise ValueError("shared adapter requires a state_token options mapping")
+            resolved["structured_state_tokens"] = {"fields": copy.deepcopy(fields), **state_token_options}
+    elif adapter_type == "state_token":
+        if field_options:
+            raise ValueError("state_token adapter does not accept per-field representation options")
+        resolved["structured_state_tokens"] = {"fields": copy.deepcopy(fields), **adapter}
+    else:
+        raise ValueError(f"Unsupported memory_adapter.type {adapter_type!r}")
+
+    resolved.setdefault("_runtime", {})["memory_schema_path"] = str(schema_path)
+    return resolved
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
@@ -202,6 +266,15 @@ def _resolve_ref(value: Any, info: dict[str, Any], total_frames: int) -> Any:
         return 0
     if value == "episode_end":
         return total_frames
+    if value.startswith("language_annotation.segment_") and value.endswith(".end_frame"):
+        segments = info.get("_language_segments")
+        if segments is None:
+            raise KeyError(value)
+        segment_text = value.removeprefix("language_annotation.segment_").removesuffix(".end_frame")
+        segment_index = int(segment_text)
+        if not (0 <= segment_index < len(segments)):
+            raise KeyError(value)
+        return sum(int(segment[1]) for segment in segments[: segment_index + 1])
     if value.startswith("task_facts."):
         return _get_nested(info["task_facts"], value.split(".")[1:])
     if value.startswith("micro_stages."):
@@ -376,6 +449,29 @@ def _structured_state_token_ids(
             _state_index, target_index = _attribute_indices(field, info, total_frames, frame_idx)
             ids.append(target_index)
     return np.asarray(ids, dtype=np.int64)
+
+
+def _initial_state_token_ids(fields: list[dict[str, Any]]) -> np.ndarray:
+    ids = []
+    for field in fields:
+        labels = _labels(field)
+        initial_value = field.get("initial_value", labels[0])
+        ids.append(_label_index(labels, initial_value))
+    return np.asarray(ids, dtype=np.int64)
+
+
+def _state_token_training_pair(
+    resolve_ids,
+    frame_idx: int,
+    query_stride: int,
+    initial_ids: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    if query_stride <= 0:
+        raise ValueError(f"query_stride must be positive, got {query_stride}")
+    target_ids = resolve_ids(frame_idx)
+    previous_idx = frame_idx - query_stride
+    input_ids = resolve_ids(previous_idx) if previous_idx >= 0 else initial_ids.copy()
+    return input_ids, target_ids
 
 
 def _execution_blocks(config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -554,6 +650,9 @@ def _populate_episode(
     instruction = _instruction_for_episode(config, episode_idx)
 
     with h5py.File(episode_path, "r") as ep:
+        info = copy.deepcopy(info)
+        if language_annotation is not None:
+            info["_language_segments"] = language_annotation[_episode_key(episode_idx)]
         vector = ep["/joint_action/vector"][:].astype(np.float32)
         total_frames = int(vector.shape[0])
         action_frames = total_frames - 1
@@ -613,7 +712,7 @@ def _populate_episode(
             }
             if structured_config is not None:
                 stride = int(structured_config.get("query_stride", 20))
-                field_count = len(structured_config["fields"])
+                initial_ids = _initial_state_token_ids(structured_config["fields"])
 
                 def state_token_ids(index: int) -> np.ndarray:
                     if structured_resolvers is not None:
@@ -627,16 +726,12 @@ def _populate_episode(
                     button = 0 if phase != 1 else 1 if index < guard_frame else 2
                     return np.asarray([phase, side, button], dtype=np.int64)
 
-                previous_ids = (
-                    state_token_ids(frame_idx - stride)
-                    if frame_idx - stride >= 0
-                    else np.zeros(field_count, dtype=np.int64)
-                )
+                previous_ids, target_ids = _state_token_training_pair(state_token_ids, frame_idx, stride, initial_ids)
                 frame.update(
                     {
                         "observation.key_state_input_ids": previous_ids,
-                        "observation.key_state_target_ids": state_token_ids(frame_idx),
-                        "observation.key_state_target_mask": np.ones(field_count, dtype=np.bool_),
+                        "observation.key_state_target_ids": target_ids,
+                        "observation.key_state_target_mask": np.ones(len(initial_ids), dtype=np.bool_),
                     }
                 )
                 if guard_frame is not None:
@@ -732,13 +827,12 @@ def parse_args(argv: list[str] | None = None) -> tuple[dict[str, Any], list[str]
     parser.add_argument("--overrides", nargs="*", default=[])
     args = parser.parse_args(argv)
 
-    config = _load_yaml(Path(args.config))
+    config_path = Path(args.config)
+    config = _load_yaml(config_path)
     overrides = _parse_override_tokens(args.overrides)
     _apply_overrides(config, overrides)
-    config["_runtime"] = {
-        "config_path": args.config,
-        "overrides": overrides,
-    }
+    config = _merge_memory_schema(config, config_path)
+    config.setdefault("_runtime", {}).update({"config_path": args.config, "overrides": overrides})
     return config, [Path(__file__).name, *(argv if argv is not None else sys.argv[1:])]
 
 

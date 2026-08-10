@@ -1,0 +1,43 @@
+version: 1
+fields:
+  - name: phase
+    kind: phase
+    initial_value: move_middle_block_to_empty_mat
+    labels:
+      - move_middle_block_to_empty_mat
+      - press_button_after_first_move
+      - move_original_mat_block_to_middle
+    ranges:
+      - label: move_middle_block_to_empty_mat
+        window: [episode_start, micro_stages.block1_place.end_frame]
+      - label: press_button_after_first_move
+        window: [micro_stages.block1_place.end_frame, micro_stages.press_return.end_frame]
+      - label: move_original_mat_block_to_middle
+        window: [micro_stages.press_return.end_frame, episode_end]
+
+  - name: empty_mat_side
+    kind: attribute
+    initial_value: unknown
+    labels: [unknown, left, right]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.empty_mat_side
+        update_window: [episode_start, micro_stages.block1_place.start_frame]
+
+  - name: button_press_status
+    kind: execution
+    initial_value: NA
+    labels: [NA, unconfirmed, confirmed]
+    ranges:
+      - label: NA
+        window: [episode_start, micro_stages.block1_place.end_frame]
+      - label: unconfirmed
+        window:
+          - micro_stages.block1_place.end_frame
+          - language_annotation.segment_4.end_frame
+      - label: confirmed
+        window:
+          - language_annotation.segment_4.end_frame
+          - micro_stages.press_return.end_frame
+      - label: NA
+        window: [micro_stages.press_return.end_frame, episode_end]

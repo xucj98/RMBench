@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import convert_robotwin_key_state_to_lerobot as converter
 import numpy as np
 import pytest
@@ -49,3 +51,50 @@ def test_partial_declarative_state_token_schema_fails_fast():
 
     with pytest.raises(ValueError, match="non-declarative"):
         converter._structured_state_token_resolvers(structured, {}, 2)  # noqa: SLF001
+
+
+def test_rearrange_adapters_resolve_the_same_semantic_memory():
+    project_root = Path(__file__).resolve().parents[4]
+    config_path = project_root / "converter_configs/shared_memory/rearrange_blocks.yaml"
+    config = converter._merge_memory_schema(converter._load_yaml(config_path), config_path)  # noqa: SLF001
+
+    assert config["semantic_memory"]["fields"] == config["structured_state_tokens"]["fields"]
+    assert [field["name"] for field in config["structured_state_tokens"]["fields"]] == [
+        "phase",
+        "empty_mat_side",
+        "button_press_status",
+    ]
+    assert config["phase"]["dim"] == [14, 17]
+    assert config["attributes"][0]["dim"] == [17, 20]
+    assert config["execution"][0]["dim"] == [20, 23]
+
+
+def test_rearrange_button_timeline_uses_schema_language_event():
+    project_root = Path(__file__).resolve().parents[4]
+    token_path = project_root / "converter_configs/shared_memory/rearrange_blocks.yaml"
+    config = converter._merge_memory_schema(converter._load_yaml(token_path), token_path)  # noqa: SLF001
+    button = config["structured_state_tokens"]["fields"][2]
+    info = {
+        "micro_stages": [
+            {"name": "block1_place", "start_frame": 10, "end_frame": 20},
+            {"name": "press_return", "start_frame": 70, "end_frame": 80},
+        ],
+        "_language_segments": [["segment", 10] for _ in range(11)],
+    }
+    ranges = converter._range_labels(button, info, 110, "button_press_status")  # noqa: SLF001
+
+    assert converter._label_at(10, ranges) == 0  # noqa: SLF001
+    assert converter._label_at(30, ranges) == 1  # noqa: SLF001
+    assert converter._label_at(50, ranges) == 2  # noqa: SLF001
+    assert converter._label_at(90, ranges) == 0  # noqa: SLF001
+
+
+def test_state_token_training_pair_uses_previous_query_target():
+    def resolve_ids(index):
+        return np.asarray([index // 20, 2], dtype=np.int64)
+
+    initial_ids = np.asarray([0, 0], dtype=np.int64)
+
+    input_ids, target_ids = converter._state_token_training_pair(resolve_ids, 10, 20, initial_ids)  # noqa: SLF001
+    np.testing.assert_array_equal(input_ids, [0, 0])
+    np.testing.assert_array_equal(target_ids, [0, 2])

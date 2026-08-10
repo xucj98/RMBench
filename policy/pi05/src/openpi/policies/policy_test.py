@@ -35,6 +35,26 @@ def test_key_state_token_hard_boundary_repeats_last_pre_guard_action():
     np.testing.assert_array_equal(transformed["actions"][3:], np.repeat(actions[2:3], 3, axis=0))
 
 
+def test_key_state_token_shared_dataset_uses_only_robot_dimensions():
+    state = np.arange(32, dtype=np.float32)
+    actions = np.arange(2 * 32, dtype=np.float32).reshape(2, 32)
+    data = {
+        "state": state,
+        "actions": actions,
+        "images": {"cam_high": np.zeros((3, 8, 8), dtype=np.uint8)},
+        "key_state_input_ids": np.asarray([0, 0, 0]),
+        "key_state_target_ids": np.asarray([1, 1, 1]),
+        "key_state_target_mask": np.ones(3, dtype=np.bool_),
+    }
+
+    transformed = aloha_policy.KeyStateTokenAlohaInputs(adapt_to_pi=False)(data)
+
+    assert transformed["state"].shape == (14,)
+    assert transformed["actions"].shape == (2, 14)
+    np.testing.assert_array_equal(transformed["state"], state[:14])
+    np.testing.assert_array_equal(transformed["actions"], actions[:, :14])
+
+
 def test_key_state_token_single_field_restores_scalarized_feature_axis():
     data = {
         "state": np.zeros(14, dtype=np.float32),

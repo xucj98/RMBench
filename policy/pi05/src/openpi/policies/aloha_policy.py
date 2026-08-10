@@ -128,7 +128,10 @@ class KeyStateTokenAlohaInputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Reuse the standard robot/image conversion; key-state values never enter
         # continuous state or action normalization.
-        standard = AlohaInputs(adapt_to_pi=self.adapt_to_pi)(data)
+        robot_data = {**data, "state": np.asarray(data["state"])[..., :14]}
+        if "actions" in data:
+            robot_data["actions"] = np.asarray(data["actions"])[..., :14]
+        standard = AlohaInputs(adapt_to_pi=self.adapt_to_pi)(robot_data)
         default_num_fields = 3 if self.key_state_field_indices is None else len(self.key_state_field_indices)
         standard["key_state_input_ids"] = self._select_key_state_fields(
             data.get("key_state_input_ids", np.zeros(default_num_fields, dtype=np.int32)),

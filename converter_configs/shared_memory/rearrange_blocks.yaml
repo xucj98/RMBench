@@ -1,0 +1,25 @@
+memory_schema: ../memory_schemas/rearrange_blocks.yaml
+
+dataset:
+  task: rearrange_blocks
+  source_dir: data/rearrange_blocks/demo_clean_state
+  repo_id: rearrange_blocks_demo_clean_state_shared_memory
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+memory_adapter:
+  type: shared
+  fields:
+    phase:
+      dim: [14, 17]
+    empty_mat_side:
+      dim: [17, 20]
+    button_press_status:
+      dim: [20, 23]
+  state_token:
+    query_stride: 20
+    button_press_down_segment: 4
+    guard_source: language_annotation.segment_4.end

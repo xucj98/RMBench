@@ -861,13 +861,6 @@ def _pi05_robotwin_key_state_prop_history_full_config() -> TrainConfig:
     )
 
 
-_REARRANGE_STATE_TOKEN_SCHEMA = [
-    {"name": "phase", "labels": ["P0", "P1", "P2"]},
-    {"name": "empty_mat_side", "labels": ["unknown", "left", "right"]},
-    {"name": "button_press_status", "labels": ["NA", "unconfirmed", "confirmed"]},
-]
-
-
 def _pi05_rearrange_state_token_boundary_ablation_config() -> TrainConfig:
     return TrainConfig(
         name="pi05_rearrange_state_token_boundary_ablation",
@@ -893,7 +886,6 @@ def _pi05_rearrange_state_token_boundary_ablation_config() -> TrainConfig:
         fsdp_devices=1,
         policy_metadata={
             "batch_id": "pi05_rearrange_state_token_boundary_ablation",
-            "key_state_schema": _REARRANGE_STATE_TOKEN_SCHEMA,
             "serial_train_conditioning": "teacher_forcing",
             "query_stride": 20,
             "button_guard_source": "language_annotation.segment_4.end",
@@ -927,7 +919,6 @@ def _pi05_rearrange_state_token_no_button_ablation_config() -> TrainConfig:
         fsdp_devices=1,
         policy_metadata={
             "batch_id": "pi05_rearrange_state_token_boundary_ablation",
-            "key_state_schema": _REARRANGE_STATE_TOKEN_SCHEMA[:2],
             "key_state_field_indices": [0, 1],
             "serial_train_conditioning": "teacher_forcing",
             "query_stride": 20,
