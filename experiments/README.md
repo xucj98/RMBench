@@ -3,8 +3,9 @@
 ## 任务级主表
 
 空白表示当前没有正式评测结果。除特别说明外，复现结果均采用 100-rollout eval；
-`pi0_lora_key_state` 使用默认 30k checkpoint 结果。`pi05_serial_soft` 两列填写
-seed0/seed1 的平均成功率，每个 seed 各100 rollouts；任一 seed 尚未结束时标为 `running`。
+`pi0_lora_key_state` 使用默认 30k checkpoint 结果。`pi05_serial_soft` 两列在两个 seed
+都完成时填写平均成功率；只有 seed0 完成时填写 `{seed0_sr} / seed1_running`。
+每个 seed 各100 rollouts。
 论文 DP / Mem-0 / Pi0.5 来自 `PROGRESS.md` 记录的 RMBench Table 1。
 
 | Task | Paper DP | Paper Mem-0 | Paper Pi0.5 | Repro DP | dp_key_state | Repro Mem-0 | pi0_lora | pi0_full | pi05_full | pi05_serial_soft @step30 | pi05_serial_soft @step50 | pi0_lora_key_state | pi0_full_key_state | pi05_full_key_state @20k | @30k | @40k |
@@ -12,11 +13,11 @@ seed0/seed1 的平均成功率，每个 seed 各100 rollouts；任一 seed 尚�
 | `observe_and_pickup` | 1% | 4% | 9% | 2% |  | 4% | 4% |  |  |  |  |  |  |  |  |  |
 | `rearrange_blocks` | 0% | 89% | 13% | 0% | 0% | 0% | 1% | 21% | 20% | 72.5% | 46% | 3% | 37% | 30% | 44% | 41% |
 | `put_back_block` | 0% | 90% | 11% | 0% | 0% |  | 7% |  |  | 82% | 81% | 55% | 68% | 65% | 59% | 60% |
-| `swap_blocks` | 11% | 67% | 24% | 15% | 0% |  | 16% |  | 14% | running | running | 44% |  | 86% | 84% | 93% |
+| `swap_blocks` | 11% | 67% | 24% | 15% | 0% |  | 16% |  | 14% | 72% / seed1_running | 45% / seed1_running | 44% |  | 86% | 84% | 93% |
 | `swap_T` | 20% | 14% | 15% | 11% |  |  | 13% |  |  |  |  |  |  |  |  |  |
-| `battery_try` | 10% | 28% | 16% | 13% | 4% |  | 8% | 13% | 17% | running | running | 15% |  | 33% | 32% | 34% |
+| `battery_try` | 10% | 28% | 16% | 13% | 4% |  | 8% | 13% | 17% | 40% / seed1_running | 23% / seed1_running | 15% |  | 33% | 32% | 34% |
 | `blocks_ranking_try` | 10% | 18% | 6% | 3% |  |  | 16% |  |  |  |  |  |  |  |  |  |
-| `cover_blocks` | 0% | 68% | 0% | 0% | 0% |  | 1% |  |  | running | running | 0% |  | 10% | 23% | 15% |
+| `cover_blocks` | 0% | 68% | 0% | 0% | 0% |  | 1% |  |  | 60% / seed1_running | 59% / seed1_running | 0% |  | 10% | 23% | 15% |
 | `press_button` | 0% | 0% | 0% | 0% |  |  | 3% |  |  |  |  |  |  |  |  |  |
 
 ## 实验索引
