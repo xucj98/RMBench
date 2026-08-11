@@ -215,11 +215,22 @@ transform 中选取字段索引 `(0, 1)`；机器人 state/action、action horiz
       --gpus 0,1,2,3 \
       --state eval_result/pi05_rearrange_state_token_boundary_ablation/_no_button_eval_queue_state.json
 
-判读时优先看两 seed 合计：若 No Button 明显下降，说明 button token 提供了额外有效信息；
-若持平，说明它被 phase/视觉冗余替代；若反而上升，则更像 button 标注噪声或
-teacher-forcing 条件与部署预测条件之间的偏差。该实验不能单独证明 Serial 优势来自“梯度更强”，
-因为 Parallel 也有相同的 state CE；Serial 的结构性区别是 action loss 能通过 state-token 条件路径
-约束 state 表征。
+四项评测均完成（4/4 succeeded，0 failed）：
+
+| pi0_step | With Button seed0 / seed1 | No Button seed0 / seed1 | With Button 两 seed | No Button 两 seed | No Button 差值 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 30 | 64% / 81% | 40% / 38% | 145/200（72.5%） | 78/200（39.0%） | **-33.5 pp** |
+| 50 | 38% / 54% | 38% / 37% | 92/200（46.0%） | 75/200（37.5%） | **-8.5 pp** |
+
+No Button 在 step30 的122次失败中，`button_not_pressed` 为106次，
+`button_press_insufficient` 为8次，两者合计114/122（93.4%）；与此同时，第一块放置曾经
+到位达到199/200。step50 的125次失败全部来自未按下或按压不足。结果支持
+`button_press_status` 提供了有效监督，主要改善按钮阶段；它对 step30 的贡献尤其显著，
+去除后原有的 step30 sweet spot 基本消失。
+
+两 seed 合计的明显下降说明 button token 没有被 phase 或视觉完全冗余替代，而是提供了
+额外有效信息。该实验仍不能单独证明 Serial 优势来自“梯度更强”，因为 Parallel 也有相同的
+state CE；Serial 的结构性区别是 action loss 能通过 state-token 条件路径约束 state 表征。
 
 ## 状态
 
@@ -236,7 +247,7 @@ teacher-forcing 条件与部署预测条件之间的偏差。该实验不能单�
 - No Button implementation / tests / real batch：completed
 - No Button 2-step smoke：completed（bs=32，2/2 steps，return code 0）
 - No Button formal training：completed（seed42，bs=32，30k；W&B `5de66onj`）
-- No Button step30/50 evaluation：running（2026-08-10 13:12 CST 启动；4 runs；eval seed0/1，各100 episodes）
+- No Button step30/50 evaluation：completed（4/4 succeeded，0 failed；eval seed0/1，各100 episodes）
   - GPU0：step30 / seed0，W&B `8aq1x4ul`
   - GPU1：step30 / seed1，W&B `fdmz4c2b`
   - GPU2：step50 / seed0，W&B `0xqi3jwh`
