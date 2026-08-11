@@ -111,6 +111,15 @@ python script/run_job_queue.py \
 eval_result/pi05_multitask_state_token_serial_soft/<task>_seed42@ckpt30k_step<30|50>_100ep_seed0
 ```
 
+两组评测于 2026-08-11 13:17 CST 启动，模型均已加载成功：
+
+| Task | step30（本机 GPU / W&B） | step50（wuwen-12 GPU / W&B） |
+| --- | --- | --- |
+| put_back_block | GPU3 / `8ejh2fhu` | GPU2 / `mmezmhag` |
+| swap_blocks | GPU4 / `hf0ynaqf` | GPU3 / `ue9abnan` |
+| battery_try | GPU5 / `i30p6cgp` | GPU4 / `69ow0226` |
+| cover_blocks | GPU6 / `yfbawiwh` | GPU5 / `1bh0k6dr` |
+
 ## 验证与状态
 
 - Python lint：completed
@@ -123,5 +132,5 @@ eval_result/pi05_multitask_state_token_serial_soft/<task>_seed42@ckpt30k_step<30
 - 10k-frame norm stats：completed（四任务，实际各 9,984 frames）
 - 2-step train smoke：completed（4/4 return code 0）
 - formal 30k training：completed（4/4 succeeded，0 failed）
-- formal step30 evaluation：pending（四任务，seed0，各100 episodes）
-- formal step50 evaluation：pending（四任务，seed0，各100 episodes）
+- formal step30 evaluation：running（本机 GPU3–6；四任务，seed0，各100 episodes）
+- formal step50 evaluation：running（wuwen-12 GPU2–5；四任务，seed0，各100 episodes）
