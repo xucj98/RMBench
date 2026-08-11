@@ -78,13 +78,38 @@ policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_seed42/<st
 
 | Run | GPU | W&B ID | 启动状态 |
 | --- | ---: | --- | --- |
-| put_back_block_seed42 | 4 | `dduk3wcd` | running |
-| swap_blocks_seed42 | 5 | `ullelo12` | running |
-| battery_try_seed42 | 6 | `8bi475al` | running |
-| cover_blocks_seed42 | 7 | `4y08q2u8` | running |
+| put_back_block_seed42 | 4 | `dduk3wcd` | completed |
+| swap_blocks_seed42 | 5 | `ullelo12` | completed |
+| battery_try_seed42 | 6 | `8bi475al` | completed |
+| cover_blocks_seed42 | 7 | `4y08q2u8` | completed |
 
-首轮检查时四个 run 均已通过模型初始化和优化 step（约 step 12–14），GPU 利用率均为
-100%，单步约 3.3–3.6 秒，预计 28–30 小时完成。
+训练队列于 2026-08-11 07:50 CST 完成，4/4 succeeded、0 failed，四个 run 均保存
+10k/20k/30k checkpoint。
+
+## 正式评测
+
+四个任务均评测 30k checkpoint、seed0、100 rollouts，并保存5个带 state-token overlay 的
+视频。为比较 replanning 间隔，同时运行 `pi0_step=30/50`：
+
+```bash
+# 本机 GPU3-6
+python script/run_job_queue.py \
+  --jobs experiments/pi05_multitask_state_token_serial_soft/jobs_eval.json \
+  --gpus 3,4,5,6 \
+  --state eval_result/pi05_multitask_state_token_serial_soft/eval_step30_queue_state.json
+
+# wuwen-12 GPU2-5
+python script/run_job_queue.py \
+  --jobs experiments/pi05_multitask_state_token_serial_soft/jobs_eval_step50.json \
+  --gpus 2,3,4,5 \
+  --state eval_result/pi05_multitask_state_token_serial_soft/eval_step50_queue_state.json
+```
+
+结果目录为：
+
+```text
+eval_result/pi05_multitask_state_token_serial_soft/<task>_seed42@ckpt30k_step<30|50>_100ep_seed0
+```
 
 ## 验证与状态
 
@@ -97,4 +122,6 @@ policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_seed42/<st
 - full LeRobot conversion：completed（四任务各 50 episodes）
 - 10k-frame norm stats：completed（四任务，实际各 9,984 frames）
 - 2-step train smoke：completed（4/4 return code 0）
-- formal 30k training：running（4/4，GPU4–7）
+- formal 30k training：completed（4/4 succeeded，0 failed）
+- formal step30 evaluation：pending（四任务，seed0，各100 episodes）
+- formal step50 evaluation：pending（四任务，seed0，各100 episodes）
