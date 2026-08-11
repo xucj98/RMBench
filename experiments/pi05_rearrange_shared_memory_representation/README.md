@@ -71,4 +71,22 @@ python script/run_job_queue.py \
 - `policy/pi05/checkpoints/pi05_full_key_state/shared_memory_full_key_state_seed0/30000`
 - `policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_seed0/30000`
 
-状态：代码与 real-batch 验收完成；正式数据、norm stats 和训练待启动。
+状态：两组训练均已完成，30k checkpoint 完整保存，训练进程返回码均为 0。
+
+## Seed 0、pi0_step=30 评测
+
+两组均使用 `demo_clean_eval`、eval seed 0、100 rollouts。模型仍输出 50-step action
+chunk，但每次只执行前 30 步后重新 query；每组前 5 条 rollout 保存带 key-state overlay
+的视频。
+
+```bash
+python script/run_job_queue.py \
+  --jobs experiments/pi05_rearrange_shared_memory_representation/jobs_eval_seed0_step30.json \
+  --gpus 1,2 \
+  --state eval_result/pi05_rearrange_shared_memory_representation/_step30_seed0_queue_state.json
+```
+
+结果目录：
+
+- `eval_result/pi05_rearrange_shared_memory_representation/full_key_state_seed0@ckpt30k_step30_100ep_seed0`
+- `eval_result/pi05_rearrange_shared_memory_representation/serial_soft_seed0@ckpt30k_step30_100ep_seed0`
