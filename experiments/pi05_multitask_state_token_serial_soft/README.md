@@ -108,7 +108,7 @@ python script/run_job_queue.py \
 结果目录为：
 
 ```text
-eval_result/pi05_multitask_state_token_serial_soft/<task>_seed42@ckpt30k_step<30|50>_100ep_seed0
+eval_result/pi05_multitask_state_token_serial_soft/<task>_seed42@ckpt30k_step<30|50>_100ep_seed<0|1>
 ```
 
 两组评测于 2026-08-11 13:17 CST 启动，模型均已加载成功：
@@ -119,6 +119,23 @@ eval_result/pi05_multitask_state_token_serial_soft/<task>_seed42@ckpt30k_step<30
 | swap_blocks | GPU4 / `hf0ynaqf` | GPU3 / `ue9abnan` |
 | battery_try | GPU5 / `i30p6cgp` | GPU4 / `69ow0226` |
 | cover_blocks | GPU6 / `yfbawiwh` | GPU5 / `1bh0k6dr` |
+
+seed1 复现继续使用相同 checkpoint 和评测设置。启动时 seed0 的6个长任务仍在运行，实时空闲卡为
+本机 GPU0/3/7 与 wuwen-12 GPU0/1/2/6/7，因此将8项拆为3+5并行：
+
+```bash
+# 本机 GPU0/3/7：step30 的 put_back_block / swap_blocks / battery_try
+python script/run_job_queue.py \
+  --jobs experiments/pi05_multitask_state_token_serial_soft/jobs_eval_seed1_local.json \
+  --gpus 0,3,7 \
+  --state eval_result/pi05_multitask_state_token_serial_soft/eval_seed1_local_queue_state.json
+
+# wuwen-12 GPU0/1/2/6/7：step30 cover_blocks + 四个 step50
+python script/run_job_queue.py \
+  --jobs experiments/pi05_multitask_state_token_serial_soft/jobs_eval_seed1_wuwen12.json \
+  --gpus 0,1,2,6,7 \
+  --state eval_result/pi05_multitask_state_token_serial_soft/eval_seed1_wuwen12_queue_state.json
+```
 
 ## 验证与状态
 
@@ -134,3 +151,4 @@ eval_result/pi05_multitask_state_token_serial_soft/<task>_seed42@ckpt30k_step<30
 - formal 30k training：completed（4/4 succeeded，0 failed）
 - formal step30 evaluation：running（本机 GPU3–6；四任务，seed0，各100 episodes）
 - formal step50 evaluation：running（wuwen-12 GPU2–5；四任务，seed0，各100 episodes）
+- eval seed1 replication：pending（step30/50 × 四任务，各100 episodes）
