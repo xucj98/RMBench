@@ -137,6 +137,15 @@ python script/run_job_queue.py \
   --state eval_result/pi05_multitask_state_token_serial_soft/eval_seed1_wuwen12_queue_state.json
 ```
 
+seed1 于 2026-08-11 16:03 CST 启动，8个模型均已加载成功：
+
+| Task | step30（机器 / GPU / W&B） | step50（机器 / GPU / W&B） |
+| --- | --- | --- |
+| put_back_block | 本机 / GPU0 / `o9egunjc` | wuwen-12 / GPU1 / `pj4erxv2` |
+| swap_blocks | 本机 / GPU3 / `ggq7ox46` | wuwen-12 / GPU2 / `2q6e82bu` |
+| battery_try | 本机 / GPU7 / `rik89hiy` | wuwen-12 / GPU6 / `2x01vgde` |
+| cover_blocks | wuwen-12 / GPU0 / `73lgv9bx` | wuwen-12 / GPU7 / `higjuz5i` |
+
 ## 验证与状态
 
 - Python lint：completed
@@ -151,4 +160,4 @@ python script/run_job_queue.py \
 - formal 30k training：completed（4/4 succeeded，0 failed）
 - formal step30 evaluation：running（本机 GPU3–6；四任务，seed0，各100 episodes）
 - formal step50 evaluation：running（wuwen-12 GPU2–5；四任务，seed0，各100 episodes）
-- eval seed1 replication：pending（step30/50 × 四任务，各100 episodes）
+- eval seed1 replication：running（8/8 已加载；step30/50 × 四任务，各100 episodes）
