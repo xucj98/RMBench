@@ -180,3 +180,30 @@ def test_oracle_get_action_uses_gt_but_preserves_prediction():
     np.testing.assert_array_equal(model.policy.override, [2, 1, 0])
     np.testing.assert_array_equal(model.state_token_ids, [2, 1, 0])
     np.testing.assert_array_equal(model.state_token_prediction_ids, [1, 2, 1])
+
+
+def test_dense_oracle_state_values_are_encoded_into_shared_memory_layout():
+    model = PI0.__new__(PI0)
+    model.key_state_enabled = True
+    model.key_state = np.zeros(32, dtype=np.float32)
+    model.key_state_schema = [
+        {"name": "phase", "labels": ["P0", "P1", "P2"], "dim": (14, 17), "encoding": "one_hot"},
+        {
+            "name": "side",
+            "labels": ["unknown", "left", "right"],
+            "dim": (17, 20),
+            "encoding": "one_hot",
+        },
+        {
+            "name": "button",
+            "labels": ["NA", "unconfirmed", "confirmed"],
+            "dim": (20, 23),
+            "encoding": "one_hot",
+        },
+    ]
+
+    model.set_oracle_key_state_values({"phase": "P2", "side": "left", "button": "NA"})
+
+    np.testing.assert_array_equal(model.key_state[14:23], [0, 0, 1, 0, 1, 0, 1, 0, 0])
+    with pytest.raises(ValueError, match="fields mismatch"):
+        model.set_oracle_key_state_values({"phase": "P2", "side": "left"})

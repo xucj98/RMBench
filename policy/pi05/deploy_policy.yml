@@ -15,6 +15,7 @@ eval_video_log: true
 eval_video_count: 5
 eval_video_key_state_overlay: true
 key_state_update_mode: raw
+key_state_rollout_mode: predicted
 state_token_rollout_mode: predicted
 wandb_enabled: true
 wandb_project: RMBench

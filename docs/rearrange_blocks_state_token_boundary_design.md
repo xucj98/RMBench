@@ -394,6 +394,13 @@ Serial checkpoint，并遵循以下诊断契约：
 `press_cnt/press_flag` 真值决定，P0/P2 使用 `NA`。这与离线 query-time state 的语义一致，
 同时避免用未来 frame 或演示时间索引作弊。
 
+Full key state 另通过 `key_state_rollout_mode: predicted | oracle` 做同语义诊断。Dense oracle
+不修改 Transformer：在每个观测进入 policy 前，使用同一个 checkpoint schema 把环境 GT 字段编码为
+32D state 的 one-hot memory tail；action 的前 14D 仍正常控制机器人，后 18D 中受 schema 管理的
+memory 预测不再递推到后续观测。chunk 内部保存观测时也重新读取当前环境 GT，因而不会把某个
+action step 的预测 memory 混入下一次 query。未被 schema 使用的 padding 维保持 0。默认值为
+`predicted`，现有 full/state-token checkpoint 的行为保持不变。
+
 ### 6.6 与 Mealy/Moore 的关系
 
 这个类比有帮助，但不完全等价。Parallel/Serial 更准确地说是联合预测与层级条件分解的

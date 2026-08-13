@@ -130,10 +130,29 @@ python script/run_job_queue.py \
 
 - `eval_result/pi05_rearrange_shared_memory_representation/serial_soft_seed0_oracle@ckpt30k_step30_100ep_seed0`
 
+## Full key-state oracle validation
+
+`key_state_rollout_mode=oracle` 时，每个环境观测写入模型前，按照 checkpoint 保存的 shared-memory
+schema 将当前环境 GT 编码到 32D state 的 dense memory tail。模型输出的 32D action 仍只把前 14D
+发送给机器人；预测 memory tail 不再递推到下一观测。chunk 内每个执行步后的观测也重新同步 GT，
+不读取未来轨迹、不改变 50-step action horizon，评测仍只执行前 30 步。
+
+```bash
+python script/run_job_queue.py \
+  --jobs experiments/pi05_rearrange_shared_memory_representation/jobs_eval_full_oracle_seed0_step30.json \
+  --gpus 6 \
+  --state eval_result/pi05_rearrange_shared_memory_representation/_full_oracle_step30_seed0_queue_state.json
+```
+
+GPU6 与已有任务共享，manifest 固定 `XLA_PYTHON_CLIENT_MEM_FRACTION=0.5`。结果目录：
+
+- `eval_result/pi05_rearrange_shared_memory_representation/full_key_state_seed0_oracle@ckpt30k_step30_100ep_seed0`
+
 当前结果：
 
 | 模型 | rollout state | train seed | eval seed | success |
 | --- | --- | ---: | ---: | ---: |
 | full key state | predicted | 0 | 0 | 93/100 |
+| full key state | oracle | 0 | 0 | running |
 | serial-soft | predicted | 0 | 0 | 36/100 |
 | serial-soft | oracle | 0 | 0 | 79/100 |

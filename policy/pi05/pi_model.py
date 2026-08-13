@@ -28,6 +28,7 @@ class PI0:
         pi0_step,
         key_state_update_mode="raw",
         state_token_rollout_mode="predicted",
+        key_state_rollout_mode="predicted",
     ):
         self.train_config_name = train_config_name
         self.model_name = model_name
@@ -38,6 +39,9 @@ class PI0:
         if state_token_rollout_mode not in {"predicted", "oracle"}:
             raise ValueError(f"Unsupported state_token_rollout_mode: {state_token_rollout_mode}")
         self.state_token_rollout_mode = state_token_rollout_mode
+        if key_state_rollout_mode not in {"predicted", "oracle"}:
+            raise ValueError(f"Unsupported key_state_rollout_mode: {key_state_rollout_mode}")
+        self.key_state_rollout_mode = key_state_rollout_mode
 
         self.checkpoint_dir = CHECKPOINT_ROOT / self.train_config_name / self.model_name / str(self.checkpoint_id)
         self.checkpoint_run_dir = self.checkpoint_dir.parent
@@ -81,6 +85,8 @@ class PI0:
             )
         if self.state_token_rollout_mode == "oracle" and self.state_token_mode != "serial":
             raise ValueError("oracle state-token rollout requires a serial state-token checkpoint")
+        if self.key_state_rollout_mode == "oracle" and not self.key_state_enabled:
+            raise ValueError("oracle dense key-state rollout requires a full key-state checkpoint")
 
         self.policy = _policy_config.create_trained_policy(
             config,
@@ -299,6 +305,32 @@ class PI0:
             return
         raise ValueError(f"Unsupported key-state encoding: {entry['encoding']}")
 
+    def set_oracle_key_state_values(self, values):
+        if not self.key_state_enabled:
+            raise ValueError("oracle dense key-state values require a full key-state checkpoint")
+        if not isinstance(values, dict):
+            raise TypeError(f"oracle key-state values must be a mapping, got {type(values).__name__}")
+        expected_names = [entry["name"] for entry in self.key_state_schema]
+        missing = [name for name in expected_names if name not in values]
+        extra = [name for name in values if name not in expected_names]
+        if missing or extra:
+            raise ValueError(f"oracle key-state fields mismatch: missing={missing}, extra={extra}")
+        for entry in self.key_state_schema:
+            field_name = entry["name"]
+            value = str(values[field_name])
+            labels = entry["labels"]
+            try:
+                index = labels.index(value)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Unknown oracle value {value!r} for key-state field {field_name!r}; "
+                    f"expected one of {labels}"
+                ) from exc
+            self._write_key_state_value(entry, index)
+
+    def uses_oracle_state(self):
+        return self.state_token_rollout_mode == "oracle" or self.key_state_rollout_mode == "oracle"
+
     def update_key_state_from_action(self, action):
         if not self.key_state_enabled:
             return
@@ -358,6 +390,7 @@ class PI0:
         items = [
             {"label": "task", "value": self.key_state_task or self.model_name},
             {"label": "update", "value": self.key_state_update_mode},
+            {"label": "rollout", "value": self.key_state_rollout_mode},
         ]
         for entry in self.key_state_schema:
             start, end = entry["dim"]
