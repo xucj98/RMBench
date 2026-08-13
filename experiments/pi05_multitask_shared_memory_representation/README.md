@@ -50,8 +50,11 @@ for task in put_back_block swap_blocks battery_try cover_blocks; do
 done
 ```
 
-Full 与 serial 分别按各自进入模型的有效维度计算 norm stats，均显式使用
-`--max-frames 10000`。
+四个 shared repo 从 clean commit `9da5cee` 转换，帧数依次为
+17,588 / 29,920 / 32,626 / 50,904。与既有 token/full 数据逐帧审计后，机器人
+state/action、token input/target/mask 的差异元素均为 0。因此 full 复用同一 32D dense
+数据的既有统计量，serial 复用同一 14D robot 数据的既有统计量；复制后已校验维度为
+32/32 与 14/14。
 
 ## 正式训练
 
@@ -64,6 +67,19 @@ python script/run_job_queue.py \
 
 共 8 条训练。GPU0 按项目默认规则保留；第 8 条 job 在前一条完成后自动接续。
 
+正式队列于 2026-08-13 14:47 CST 从 clean commit `9da5cee` 启动：
+
+| Run | GPU | W&B ID | 启动状态 |
+| --- | ---: | --- | --- |
+| put_back_block_full_key_state_seed0 | 1 | `wecc9fjx` | running |
+| put_back_block_serial_soft_seed0 | 2 | `qdrni4cb` | running |
+| swap_blocks_full_key_state_seed0 | 3 | `1gaddz2j` | running |
+| swap_blocks_serial_soft_seed0 | 4 | `3dl52sms` | running |
+| battery_try_full_key_state_seed0 | 5 | `4bejv16r` | running |
+| battery_try_serial_soft_seed0 | 6 | `a72dsvz0` | running |
+| cover_blocks_full_key_state_seed0 | 7 | `9416n4r2` | running |
+| cover_blocks_serial_soft_seed0 | queue | pending | waiting for first free GPU |
+
 目标 checkpoint：
 
 ```text
@@ -74,6 +90,11 @@ policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_serial_sof
 ## 状态
 
 - shared schema / converter config: implemented
-- schema regression: 9 passed
+- converter regression: 9 passed
+- related non-manual regression: 18 passed, 2 deselected
 - one-episode conversion smoke: 4/4 passed
-- full dataset / norm stats / train smoke / formal training: pending
+- full dataset conversion: 4/4 passed; 131,038 total frames
+- old/new full-frame equality audit: passed; all compared fields have 0 mismatched elements
+- norm stats: ready and dimension-checked for 8/8 model/task combinations
+- 2-step, bs=32 train smoke: 8/8 passed
+- formal 30k training: 7 running, 1 queued; 0 failed
