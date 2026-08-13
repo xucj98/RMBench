@@ -146,6 +146,22 @@ seed1 于 2026-08-11 16:03 CST 启动，8个模型均已加载成功：
 | battery_try | 本机 / GPU7 / `rik89hiy` | wuwen-12 / GPU6 / `2x01vgde` |
 | cover_blocks | wuwen-12 / GPU0 / `73lgv9bx` | wuwen-12 / GPU7 / `higjuz5i` |
 
+## 最终结果
+
+四个任务的 seed0/seed1 队列均已完成，共16/16 succeeded、0 failed。下表每个 seed 为
+100 rollouts；均值等价于两个 seed 合计200 rollouts 的成功率。
+
+| Task | step30 seed0 / seed1 | step30 均值 | step50 seed0 / seed1 | step50 均值 | step30 - step50 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| put_back_block | 81% / 83% | 82% | 78% / 84% | 81% | +1 pp |
+| swap_blocks | 72% / 61% | 66.5% | 45% / 25% | 35% | +31.5 pp |
+| battery_try | 40% / 32% | 36% | 23% / 25% | 24% | +12 pp |
+| cover_blocks | 60% / 65% | 62.5% | 59% / 51% | 55% | +7.5 pp |
+
+四个任务的双 seed 均值均为 step30 更高。差异在 `swap_blocks` 最大（+31.5 pp），其次是
+`battery_try`（+12 pp）和 `cover_blocks`（+7.5 pp）；`put_back_block` 基本持平（+1 pp）。
+这说明从 `rearrange_blocks` 迁移得到的 step30 优势在其余任务上总体成立，但强度依赖任务。
+
 ## 验证与状态
 
 - Python lint：completed
@@ -158,6 +174,6 @@ seed1 于 2026-08-11 16:03 CST 启动，8个模型均已加载成功：
 - 10k-frame norm stats：completed（四任务，实际各 9,984 frames）
 - 2-step train smoke：completed（4/4 return code 0）
 - formal 30k training：completed（4/4 succeeded，0 failed）
-- formal step30 evaluation：running（本机 GPU3–6；四任务，seed0，各100 episodes）
-- formal step50 evaluation：running（wuwen-12 GPU2–5；四任务，seed0，各100 episodes）
-- eval seed1 replication：running（8/8 已加载；step30/50 × 四任务，各100 episodes）
+- formal step30 evaluation：completed（4/4 succeeded，0 failed；seed0，各100 episodes）
+- formal step50 evaluation：completed（4/4 succeeded，0 failed；seed0，各100 episodes）
+- eval seed1 replication：completed（8/8 succeeded，0 failed；step30/50 × 四任务，各100 episodes）
