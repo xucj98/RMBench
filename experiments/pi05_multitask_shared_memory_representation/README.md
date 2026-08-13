@@ -65,7 +65,7 @@ python script/run_job_queue.py \
   --state policy/pi05/checkpoints/pi05_multitask_shared_memory_representation_queue_state.json
 ```
 
-共 8 条训练。GPU0 按项目默认规则保留；第 8 条 job 在前一条完成后自动接续。
+共 8 条训练。最初在 GPU1-7 启动 7 条；经确认允许使用 GPU0 后，停止原协调进程（不影响已独立运行的训练进程），并在 GPU0 启动最后一条。
 
 正式队列于 2026-08-13 14:47 CST 从 clean commit `9da5cee` 启动：
 
@@ -78,7 +78,7 @@ python script/run_job_queue.py \
 | battery_try_full_key_state_seed0 | 5 | `4bejv16r` | running |
 | battery_try_serial_soft_seed0 | 6 | `a72dsvz0` | running |
 | cover_blocks_full_key_state_seed0 | 7 | `9416n4r2` | running |
-| cover_blocks_serial_soft_seed0 | queue | pending | waiting for first free GPU |
+| cover_blocks_serial_soft_seed0 | 0 | `r5bu3qoc` | running |
 
 目标 checkpoint：
 
@@ -97,4 +97,4 @@ policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_serial_sof
 - old/new full-frame equality audit: passed; all compared fields have 0 mismatched elements
 - norm stats: ready and dimension-checked for 8/8 model/task combinations
 - 2-step, bs=32 train smoke: 8/8 passed
-- formal 30k training: 7 running, 1 queued; 0 failed
+- formal 30k training: 8 running, 0 queued; 0 failed
