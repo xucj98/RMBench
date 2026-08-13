@@ -1,0 +1,25 @@
+memory_schema: ../memory_schemas/cover_blocks.yaml
+
+dataset:
+  task: cover_blocks
+  source_dir: data/cover_blocks/demo_clean_state
+  repo_id: cover_blocks_demo_clean_state_shared_memory
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+memory_adapter:
+  type: shared
+  fields:
+    phase:
+      dim: [14, 20]
+    red_pos:
+      dim: [20, 24]
+    green_pos:
+      dim: [24, 28]
+    blue_pos:
+      dim: [28, 32]
+  state_token:
+    query_stride: 20

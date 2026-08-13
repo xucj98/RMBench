@@ -69,6 +69,35 @@ def test_rearrange_adapters_resolve_the_same_semantic_memory():
     assert config["execution"][0]["dim"] == [20, 23]
 
 
+@pytest.mark.parametrize(
+    ("task", "field_names", "dense_dims"),
+    [
+        ("put_back_block", ["phase", "origin_mat"], [[14, 17], [17, 22]]),
+        (
+            "swap_blocks",
+            ["phase", "initial_empty_tray", "first_origin_tray"],
+            [[14, 18], [18, 22], [22, 26]],
+        ),
+        ("battery_try", ["phase"], [[14, 18]]),
+        (
+            "cover_blocks",
+            ["phase", "red_pos", "green_pos", "blue_pos"],
+            [[14, 20], [20, 24], [24, 28], [28, 32]],
+        ),
+    ],
+)
+def test_multitask_shared_adapters_resolve_the_same_semantic_memory(task, field_names, dense_dims):
+    project_root = Path(__file__).resolve().parents[4]
+    config_path = project_root / f"converter_configs/shared_memory/{task}.yaml"
+    config = converter._merge_memory_schema(converter._load_yaml(config_path), config_path)  # noqa: SLF001
+
+    assert config["semantic_memory"]["fields"] == config["structured_state_tokens"]["fields"]
+    assert [field["name"] for field in config["semantic_memory"]["fields"]] == field_names
+    resolved_dense_fields = [config["phase"], *config.get("attributes", []), *config.get("execution", [])]
+    assert [field["dim"] for field in resolved_dense_fields] == dense_dims
+    assert config["structured_state_tokens"]["query_stride"] == 20
+
+
 def test_rearrange_button_timeline_uses_schema_language_event():
     project_root = Path(__file__).resolve().parents[4]
     token_path = project_root / "converter_configs/shared_memory/rearrange_blocks.yaml"

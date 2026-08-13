@@ -1,0 +1,19 @@
+memory_schema: ../memory_schemas/battery_try.yaml
+
+dataset:
+  task: battery_try
+  source_dir: data/battery_try/demo_clean_state
+  repo_id: battery_try_demo_clean_state_shared_memory
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+memory_adapter:
+  type: shared
+  fields:
+    phase:
+      dim: [14, 18]
+  state_token:
+    query_stride: 20

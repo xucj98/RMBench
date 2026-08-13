@@ -1,0 +1,25 @@
+version: 1
+fields:
+  - name: phase
+    kind: phase
+    initial_value: move_block_to_center
+    labels:
+      - move_block_to_center
+      - press_button
+      - move_block_back_to_origin_mat
+    ranges:
+      - label: move_block_to_center
+        window: [episode_start, micro_stages.center_place.end_frame]
+      - label: press_button
+        window: [micro_stages.center_place.end_frame, micro_stages.button_return.end_frame]
+      - label: move_block_back_to_origin_mat
+        window: [micro_stages.button_return.end_frame, episode_end]
+
+  - name: origin_mat
+    kind: attribute
+    initial_value: unknown
+    labels: [unknown, left, right, front, back]
+    transitions:
+      - from_value: unknown
+        to_value: task_facts.origin_mat_name
+        update_window: [episode_start, micro_stages.center_pick.end_frame]

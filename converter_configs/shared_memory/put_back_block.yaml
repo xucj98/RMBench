@@ -1,0 +1,21 @@
+memory_schema: ../memory_schemas/put_back_block.yaml
+
+dataset:
+  task: put_back_block
+  source_dir: data/put_back_block/demo_clean_state
+  repo_id: put_back_block_demo_clean_state_shared_memory
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+memory_adapter:
+  type: shared
+  fields:
+    phase:
+      dim: [14, 17]
+    origin_mat:
+      dim: [17, 22]
+  state_token:
+    query_stride: 20

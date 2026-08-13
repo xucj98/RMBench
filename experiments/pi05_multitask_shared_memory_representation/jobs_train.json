@@ -1,0 +1,242 @@
+{
+  "jobs": [
+    {
+      "name": "put_back_block_full_key_state_seed0",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_full_key_state",
+        "--exp-name=put_back_block_full_key_state_seed0",
+        "--data.repo-id=put_back_block_demo_clean_state_shared_memory",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=0"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/put_back_block_full_key_state_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/put_back_block_full_key_state_seed0/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    },
+    {
+      "name": "put_back_block_serial_soft_seed0",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_multitask_state_token_serial_soft",
+        "--exp-name=put_back_block_serial_soft_seed0",
+        "--data.repo-id=put_back_block_demo_clean_state_shared_memory",
+        "--model.key-state-num-values",
+        "3",
+        "5",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=0"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/put_back_block_serial_soft_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/put_back_block_serial_soft_seed0/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    },
+    {
+      "name": "swap_blocks_full_key_state_seed0",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_full_key_state",
+        "--exp-name=swap_blocks_full_key_state_seed0",
+        "--data.repo-id=swap_blocks_demo_clean_state_shared_memory",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=0"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/swap_blocks_full_key_state_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/swap_blocks_full_key_state_seed0/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    },
+    {
+      "name": "swap_blocks_serial_soft_seed0",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_multitask_state_token_serial_soft",
+        "--exp-name=swap_blocks_serial_soft_seed0",
+        "--data.repo-id=swap_blocks_demo_clean_state_shared_memory",
+        "--model.key-state-num-values",
+        "4",
+        "4",
+        "4",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=0"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/swap_blocks_serial_soft_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/swap_blocks_serial_soft_seed0/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    },
+    {
+      "name": "battery_try_full_key_state_seed0",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_full_key_state",
+        "--exp-name=battery_try_full_key_state_seed0",
+        "--data.repo-id=battery_try_demo_clean_state_shared_memory",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=0"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/battery_try_full_key_state_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/battery_try_full_key_state_seed0/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    },
+    {
+      "name": "battery_try_serial_soft_seed0",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_multitask_state_token_serial_soft",
+        "--exp-name=battery_try_serial_soft_seed0",
+        "--data.repo-id=battery_try_demo_clean_state_shared_memory",
+        "--model.key-state-num-values",
+        "4",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=0"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/battery_try_serial_soft_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/battery_try_serial_soft_seed0/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    },
+    {
+      "name": "cover_blocks_full_key_state_seed0",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_full_key_state",
+        "--exp-name=cover_blocks_full_key_state_seed0",
+        "--data.repo-id=cover_blocks_demo_clean_state_shared_memory",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=0"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/cover_blocks_full_key_state_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/cover_blocks_full_key_state_seed0/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    },
+    {
+      "name": "cover_blocks_serial_soft_seed0",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_multitask_state_token_serial_soft",
+        "--exp-name=cover_blocks_serial_soft_seed0",
+        "--data.repo-id=cover_blocks_demo_clean_state_shared_memory",
+        "--model.key-state-num-values",
+        "6",
+        "4",
+        "4",
+        "4",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=0"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/cover_blocks_serial_soft_seed0/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/_formal_logs/cover_blocks_serial_soft_seed0/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    }
+  ]
+}

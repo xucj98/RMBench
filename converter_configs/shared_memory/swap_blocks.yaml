@@ -1,0 +1,23 @@
+memory_schema: ../memory_schemas/swap_blocks.yaml
+
+dataset:
+  task: swap_blocks
+  source_dir: data/swap_blocks/demo_clean_state
+  repo_id: swap_blocks_demo_clean_state_shared_memory
+  episodes: 50
+
+state_layout:
+  state_dim: 32
+  robot_dim: 14
+
+memory_adapter:
+  type: shared
+  fields:
+    phase:
+      dim: [14, 18]
+    initial_empty_tray:
+      dim: [18, 22]
+    first_origin_tray:
+      dim: [22, 26]
+  state_token:
+    query_stride: 20
