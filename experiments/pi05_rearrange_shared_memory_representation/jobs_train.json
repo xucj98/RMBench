@@ -16,7 +16,7 @@
       "env": {
         "PYTHONPATH": "src",
         "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
-        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_RUN_GROUP": "pi05_rearrange_shared_memory_representation",
         "WANDB_JOB_TYPE": "train"
       },
       "log_path": "policy/pi05/checkpoints/pi05_full_key_state/_formal_logs/shared_memory_full_key_state_seed0/train.stdout.log",
@@ -45,7 +45,7 @@
       "env": {
         "PYTHONPATH": "src",
         "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
-        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_RUN_GROUP": "pi05_rearrange_shared_memory_representation",
         "WANDB_JOB_TYPE": "train"
       },
       "log_path": "policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/_formal_logs/shared_memory_serial_soft_seed0/train.stdout.log",

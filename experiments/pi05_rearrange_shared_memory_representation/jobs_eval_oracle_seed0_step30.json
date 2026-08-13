@@ -44,7 +44,7 @@
         "--wandb_project",
         "RMBench",
         "--wandb_group",
-        "pi05_multitask_shared_memory_representation",
+        "pi05_rearrange_shared_memory_representation",
         "--wandb_name",
         "shared_memory_serial_soft_seed0_oracle_ckpt30k_step30_seed0_eval",
         "--wandb_job_type",

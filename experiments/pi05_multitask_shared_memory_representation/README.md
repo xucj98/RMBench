@@ -1,11 +1,11 @@
 # Pi0.5 Multi-task Shared-Memory Representation
 
-本实验组在五个任务上比较 dense full key state 与 serial-soft state token。此前完成的
-`rearrange_blocks` 与本批次新增的四个任务统一归入同一个 W&B group：
+本实验原计划在另外四个任务上比较 dense full key state 与 serial-soft state token。
+`rearrange_blocks` 保留在独立的 `pi05_rearrange_shared_memory_representation` W&B group，
+不属于本实验组：
 
 | Task | Semantic memory |
 | --- | --- |
-| rearrange_blocks | phase(3) + empty_mat_side(3) + button_press_status(3) |
 | put_back_block | phase(3) + origin_mat(5) |
 | swap_blocks | phase(4) + initial_empty_tray(4) + first_origin_tray(4) |
 | battery_try | phase(4) |
@@ -23,14 +23,10 @@ state/action 与离散 token sidecar。Full 路径读取完整 32D；serial 路�
 - action horizon: 50
 - token query stride: 20
 - W&B project/group: `RMBench` / `pi05_multitask_shared_memory_representation`
-- full train config: 五个任务均为 `pi05_full_key_state`
-- serial train config: 新四任务为 `pi05_multitask_state_token_serial_soft`；历史 rearrange run 为
-  `pi05_rearrange_state_token_boundary_ablation` 加 `key_state_token_mode=serial`
+- full train config: 四个任务均为 `pi05_full_key_state`
+- serial train config: 四个任务均为 `pi05_multitask_state_token_serial_soft`
 
-两个 serial config 的有效模型结构、state loss、优化器、teacher forcing 和 soft boundary
-相同；历史 rearrange config 额外携带仅供 hard boundary 使用的 guard sidecar、旧 norm asset
-路径和实验 metadata。新四任务仅通过 `repo_id`、run name 和 token category counts 覆盖配置，
-不新增八份 train config。
+四个任务仅通过 `repo_id`、run name 和 token category counts 覆盖配置，不新增八份 train config。
 
 ## 数据
 
@@ -71,21 +67,19 @@ python script/run_job_queue.py \
 
 共 8 条训练。最初在 GPU1-7 启动 7 条；经确认允许使用 GPU0 后，停止原协调进程（不影响已独立运行的训练进程），并在 GPU0 启动最后一条。
 
-正式队列于 2026-08-13 14:47 CST 从 clean commit `9da5cee` 启动：
+正式队列于 2026-08-13 14:47 CST 从 clean commit `9da5cee` 启动，随后因先验证
+rearrange 的 seed 影响而全部中止。8 个 W&B run 和未完成 checkpoint 已删除。
 
-此前完成的 rearrange runs 已于 2026-08-13 迁入同一 W&B group：full `fw5tgans`、
-serial-soft `zs2c9uzy`。因此该 group 当前包含五任务共 10 个模型。
-
-| Run | GPU | W&B ID | 启动状态 |
+| Run | GPU | W&B ID | 最终状态 |
 | --- | ---: | --- | --- |
-| put_back_block_full_key_state_seed0 | 1 | `wecc9fjx` | running |
-| put_back_block_serial_soft_seed0 | 2 | `qdrni4cb` | running |
-| swap_blocks_full_key_state_seed0 | 3 | `1gaddz2j` | running |
-| swap_blocks_serial_soft_seed0 | 4 | `3dl52sms` | running |
-| battery_try_full_key_state_seed0 | 5 | `4bejv16r` | running |
-| battery_try_serial_soft_seed0 | 6 | `a72dsvz0` | running |
-| cover_blocks_full_key_state_seed0 | 7 | `9416n4r2` | running |
-| cover_blocks_serial_soft_seed0 | 0 | `r5bu3qoc` | running |
+| put_back_block_full_key_state_seed0 | 1 | `wecc9fjx` | stopped/deleted |
+| put_back_block_serial_soft_seed0 | 2 | `qdrni4cb` | stopped/deleted |
+| swap_blocks_full_key_state_seed0 | 3 | `1gaddz2j` | stopped/deleted |
+| swap_blocks_serial_soft_seed0 | 4 | `3dl52sms` | stopped/deleted |
+| battery_try_full_key_state_seed0 | 5 | `4bejv16r` | stopped/deleted |
+| battery_try_serial_soft_seed0 | 6 | `a72dsvz0` | stopped/deleted |
+| cover_blocks_full_key_state_seed0 | 7 | `9416n4r2` | stopped/deleted |
+| cover_blocks_serial_soft_seed0 | 0 | `r5bu3qoc` | stopped/deleted |
 
 目标 checkpoint：
 
@@ -104,4 +98,4 @@ policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_serial_sof
 - old/new full-frame equality audit: passed; all compared fields have 0 mismatched elements
 - norm stats: ready and dimension-checked for 8/8 model/task combinations
 - 2-step, bs=32 train smoke: 8/8 passed
-- formal 30k training: 8 running, 0 queued; 0 failed
+- formal 30k training: cancelled; 8 W&B runs and partial checkpoint metadata removed

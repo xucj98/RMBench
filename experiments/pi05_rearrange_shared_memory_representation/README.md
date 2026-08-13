@@ -57,11 +57,11 @@ robot state/action 与原 token dataset 相同，且 token transform 会在 norm
 - train seed：0
 - action horizon：50
 - token query stride：20
-- W&B project/group：`RMBench` / `pi05_multitask_shared_memory_representation`
+- W&B project/group：`RMBench` / `pi05_rearrange_shared_memory_representation`
 
-这两个历史 run 启动时使用旧 group `pi05_rearrange_shared_memory_representation`；2026-08-13
-已在 W&B 中迁移到五任务统一 group，run ID、指标和 checkpoint 均未改变。manifest 也已同步
-更新，后续复跑会直接进入统一 group。
+两个 seed 0 历史 run、新增的 seed 42 run 以及对应 eval 均归入这个 rearrange 专用 group。
+曾短暂迁入的 `pi05_multitask_shared_memory_representation` group 已纠正；run ID、指标和
+checkpoint 不变。
 
 ```bash
 python script/run_job_queue.py \
@@ -136,4 +136,4 @@ python script/run_job_queue.py \
 | --- | --- | ---: | ---: | ---: |
 | full key state | predicted | 0 | 0 | 93/100 |
 | serial-soft | predicted | 0 | 0 | 36/100 |
-| serial-soft | oracle | 0 | 0 | running |
+| serial-soft | oracle | 0 | 0 | 79/100 |
