@@ -115,3 +115,15 @@ def test_broker():
     for _ in range(config.model.action_horizon):
         outputs = broker.infer(example)
         assert outputs["actions"].shape == (14,)
+
+
+def test_key_state_override_validation():
+    policy = _policy.Policy.__new__(_policy.Policy)
+    policy._key_state_num_fields = 3  # noqa: SLF001
+    policy._key_state_num_values = (3, 3, 3)  # noqa: SLF001
+
+    np.testing.assert_array_equal(policy._validate_key_state_override([1, 2, 0]), [1, 2, 0])  # noqa: SLF001
+    with pytest.raises(ValueError, match="one value per state field"):
+        policy._validate_key_state_override([1, 2])  # noqa: SLF001
+    with pytest.raises(ValueError, match="out of range"):
+        policy._validate_key_state_override([1, 3, 0])  # noqa: SLF001

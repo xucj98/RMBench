@@ -129,3 +129,54 @@ def test_eval_restores_state_token_mode_from_checkpoint_metadata(tmp_path):
     assert shared_config.model.key_state_token_mode == "parallel"
     assert restored_config.model.key_state_token_mode == "serial"
     assert restored_config.policy_metadata["serial_train_conditioning"] == "teacher_forcing"
+
+
+class _OraclePolicy:
+    def __init__(self):
+        self.override = None
+
+    def infer(self, _observation, *, key_state_override=None):
+        self.override = np.asarray(key_state_override, dtype=np.int32)
+        return {
+            "actions": np.zeros((50, 14), dtype=np.float32),
+            "key_state": self.override.copy(),
+            "key_state_prediction": np.asarray([1, 2, 1], dtype=np.int32),
+        }
+
+
+def test_oracle_state_values_are_encoded_from_checkpoint_schema():
+    model = PI0.__new__(PI0)
+    model.state_token_enabled = True
+    model.state_token_schema = [
+        {"name": "phase", "labels": ["P0", "P1", "P2"]},
+        {"name": "side", "labels": ["unknown", "left", "right"]},
+        {"name": "button", "labels": ["NA", "unconfirmed", "confirmed"]},
+    ]
+
+    encoded = model.encode_state_token_values(
+        {"phase": "P1", "side": "right", "button": "confirmed"}
+    )
+
+    np.testing.assert_array_equal(encoded, [1, 2, 2])
+    with pytest.raises(ValueError, match="fields mismatch"):
+        model.encode_state_token_values({"phase": "P1", "side": "right"})
+
+
+def test_oracle_get_action_uses_gt_but_preserves_prediction():
+    model = PI0.__new__(PI0)
+    model.observation_window = {"state": np.zeros(14, dtype=np.float32)}
+    model.state_token_rollout_mode = "oracle"
+    model.state_token_enabled = True
+    model.state_token_schema = [
+        {"name": "phase", "labels": ["P0", "P1", "P2"]},
+        {"name": "side", "labels": ["unknown", "left", "right"]},
+        {"name": "button", "labels": ["NA", "unconfirmed", "confirmed"]},
+    ]
+    model.policy = _OraclePolicy()
+
+    actions = model.get_action({"phase": "P2", "side": "left", "button": "NA"})
+
+    assert actions.shape == (50, 14)
+    np.testing.assert_array_equal(model.policy.override, [2, 1, 0])
+    np.testing.assert_array_equal(model.state_token_ids, [2, 1, 0])
+    np.testing.assert_array_equal(model.state_token_prediction_ids, [1, 2, 1])

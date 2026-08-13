@@ -94,3 +94,46 @@ python script/run_job_queue.py \
 
 - `eval_result/pi05_rearrange_shared_memory_representation/full_key_state_seed0@ckpt30k_step30_100ep_seed0`
 - `eval_result/pi05_rearrange_shared_memory_representation/serial_soft_seed0@ckpt30k_step30_100ep_seed0`
+
+## Seed 42 serial-soft 复现
+
+为区分 shared-memory 改造与训练随机种子的影响，补跑与旧实验一致的 train seed 42：
+
+```bash
+python script/run_job_queue.py \
+  --jobs experiments/pi05_rearrange_shared_memory_representation/jobs_train_seed42.json \
+  --gpus 7 \
+  --state policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/_formal_logs/shared_memory_serial_soft_seed42/queue_state.json
+```
+
+产物：
+
+- `policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_seed42/30000`
+- W&B run：`81pfcs8v`
+
+状态：2026-08-13 已在 GPU7 启动，30k 训练中。
+
+## Serial oracle-state validation
+
+`state_token_rollout_mode=oracle` 时，模型仍输出预测 state 供诊断，但当前 action condition 和
+下一次 query 的 previous-state memory 都使用环境 GT state。GT 只来自当前仿真物理状态，不读取
+未来 expert trajectory。正式评测沿用 seed 0、100 rollouts、`pi0_step=30`：
+
+```bash
+python script/run_job_queue.py \
+  --jobs experiments/pi05_rearrange_shared_memory_representation/jobs_eval_oracle_seed0_step30.json \
+  --gpus 6 \
+  --state eval_result/pi05_rearrange_shared_memory_representation/_oracle_step30_seed0_queue_state.json
+```
+
+结果目录：
+
+- `eval_result/pi05_rearrange_shared_memory_representation/serial_soft_seed0_oracle@ckpt30k_step30_100ep_seed0`
+
+当前结果：
+
+| 模型 | rollout state | train seed | eval seed | success |
+| --- | --- | ---: | ---: | ---: |
+| full key state | predicted | 0 | 0 | 93/100 |
+| serial-soft | predicted | 0 | 0 | 36/100 |
+| serial-soft | oracle | 0 | 0 | running |

@@ -66,7 +66,8 @@ class Policy(BasePolicy):
             self._key_state_token_enabled = getattr(model, "key_state_token_mode", "disabled") != "disabled"
             if self._key_state_token_enabled:
                 self._sample_actions_with_key_state = nnx_utils.module_jit(model.sample_actions_with_key_state)
-                self._key_state_num_fields = len(getattr(model, "key_state_num_values", ()))
+                self._key_state_num_values = tuple(int(value) for value in getattr(model, "key_state_num_values", ()))
+                self._key_state_num_fields = len(self._key_state_num_values)
                 if self._key_state_num_fields <= 0:
                     raise ValueError("key-state token model must define at least one field")
                 self._key_state_previous = np.zeros(self._key_state_num_fields, dtype=np.int32)
@@ -76,11 +77,38 @@ class Policy(BasePolicy):
         if getattr(self, "_key_state_token_enabled", False):
             self._key_state_previous = np.zeros(self._key_state_num_fields, dtype=np.int32)
 
+    def _validate_key_state_override(self, value: np.ndarray) -> np.ndarray:
+        override = np.asarray(value, dtype=np.int32)
+        if override.shape != (self._key_state_num_fields,):
+            raise ValueError(
+                "key_state_override must have one value per state field: "
+                f"expected {(self._key_state_num_fields,)}, got {override.shape}"
+            )
+        for field_index, (field_value, num_values) in enumerate(
+            zip(override, self._key_state_num_values, strict=True)
+        ):
+            if not 0 <= int(field_value) < num_values:
+                raise ValueError(
+                    f"key_state_override field {field_index} is out of range: "
+                    f"value={int(field_value)}, num_values={num_values}"
+                )
+        return override
+
     @override
-    def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
+    def infer(
+        self,
+        obs: dict,
+        *,
+        noise: np.ndarray | None = None,
+        key_state_override: np.ndarray | None = None,
+    ) -> dict:  # type: ignore[misc]
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         inputs = self._input_transform(inputs)
+        if key_state_override is not None:
+            if not getattr(self, "_key_state_token_enabled", False):
+                raise ValueError("key_state_override requires a key-state token model")
+            key_state_override = self._validate_key_state_override(key_state_override)
         if getattr(self, "_key_state_token_enabled", False):
             inputs["key_state_input_ids"] = self._key_state_previous
         if not self._is_pytorch_model:
@@ -94,6 +122,8 @@ class Policy(BasePolicy):
 
         # Prepare kwargs for sample_actions
         sample_kwargs = dict(self._sample_kwargs)
+        if key_state_override is not None:
+            sample_kwargs["action_condition_state_ids"] = jnp.asarray(key_state_override)[None, ...]
         if noise is not None:
             noise = torch.from_numpy(noise).to(self._pytorch_device) if self._is_pytorch_model else jnp.asarray(noise)
 
@@ -124,8 +154,11 @@ class Policy(BasePolicy):
         outputs = self._output_transform(outputs)
         if key_state_diagnostics is not None:
             key_state_ids, key_state_logits = key_state_diagnostics
-            self._key_state_previous = np.asarray(key_state_ids[0, ...], dtype=np.int32)
+            predicted_ids = np.asarray(key_state_ids[0, ...], dtype=np.int32)
+            executed_ids = predicted_ids if key_state_override is None else key_state_override
+            self._key_state_previous = np.asarray(executed_ids, dtype=np.int32)
             outputs["key_state"] = self._key_state_previous.copy()
+            outputs["key_state_prediction"] = predicted_ids
             outputs["key_state_logits"] = np.asarray(key_state_logits[0, ...])
         outputs["policy_timing"] = {
             "infer_ms": model_time * 1000,

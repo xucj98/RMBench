@@ -23,10 +23,22 @@ def encode_obs(observation):
 
 
 def get_model(usr_args):
-    train_config_name, model_name, checkpoint_id, pi0_step = (usr_args["train_config_name"], usr_args["model_name"],
-                                                              usr_args["checkpoint_id"], usr_args["pi0_step"])
+    train_config_name, model_name, checkpoint_id, pi0_step = (
+        usr_args["train_config_name"],
+        usr_args["model_name"],
+        usr_args["checkpoint_id"],
+        usr_args["pi0_step"],
+    )
     key_state_update_mode = usr_args.get("key_state_update_mode", "raw")
-    return PI0(train_config_name, model_name, checkpoint_id, pi0_step, key_state_update_mode)
+    state_token_rollout_mode = usr_args.get("state_token_rollout_mode", "predicted")
+    return PI0(
+        train_config_name,
+        model_name,
+        checkpoint_id,
+        pi0_step,
+        key_state_update_mode,
+        state_token_rollout_mode,
+    )
 
 
 def sync_eval_video_overlay(TASK_ENV, model):
@@ -45,7 +57,21 @@ def eval(TASK_ENV, model, observation):
 
     # ======== Get Action ========
 
-    actions = model.get_action()[:model.pi0_step]
+    oracle_state = None
+    if model.state_token_rollout_mode == "oracle":
+        oracle_provider = getattr(TASK_ENV, "get_oracle_key_state", None)
+        if oracle_provider is None:
+            raise ValueError(
+                f"Task {type(TASK_ENV).__name__} does not provide get_oracle_key_state()"
+            )
+        oracle_state = oracle_provider()
+
+    actions = model.get_action(oracle_state=oracle_state)[:model.pi0_step]
+    state_token_diagnostics = model.get_state_token_diagnostics()
+    if state_token_diagnostics is not None and hasattr(TASK_ENV, "_record_eval_diagnostic_event"):
+        TASK_ENV._record_eval_diagnostic_event(  # noqa: SLF001
+            "state_token_query", **state_token_diagnostics
+        )
 
     for step, action in enumerate(actions):
         sync_eval_video_overlay(TASK_ENV, model)

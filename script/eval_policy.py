@@ -212,6 +212,7 @@ def build_wandb_config(save_dir, usr_args, task_args):
             "eval_video_log": usr_args.get("eval_video_log", True),
             "eval_video_count": usr_args.get("eval_video_count", 5),
             "eval_video_key_state_overlay": usr_args.get("eval_video_key_state_overlay", False),
+            "state_token_rollout_mode": usr_args.get("state_token_rollout_mode", "predicted"),
             "eval_output_dir": str(save_dir),
         },
         "runtime": usr_args.get("_runtime", {}),

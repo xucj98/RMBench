@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+import openpi.models.pi0 as _pi0
 import openpi.models.pi0_config as _pi0_config
 
 
@@ -147,3 +148,31 @@ def test_key_state_transition_mask():
     previous = jnp.asarray([[0, 0, 0]], dtype=jnp.int32)
     # P0 cannot skip to P2; entering P1 forces button=unconfirmed.
     assert model._select_key_state(logits, previous).tolist() == [[1, 1, 1]]  # noqa: SLF001
+
+def test_serial_state_token_accepts_oracle_action_condition():
+    predicted_ids = jnp.asarray([[0, 0, 0], [1, 2, 1]], dtype=jnp.int32)
+    oracle_ids = jnp.asarray([[0, 1, 0], [2, 2, 0]], dtype=jnp.int32)
+
+    condition_ids = _pi0.Pi0._resolve_action_condition_state_ids(  # noqa: SLF001
+        predicted_ids, oracle_ids
+    )
+
+    assert condition_ids.tolist() == oracle_ids.tolist()
+
+
+def test_serial_state_token_defaults_to_prediction_without_oracle():
+    predicted_ids = jnp.asarray([[0, 1, 0]], dtype=jnp.int32)
+
+    condition_ids = _pi0.Pi0._resolve_action_condition_state_ids(  # noqa: SLF001
+        predicted_ids, None
+    )
+
+    assert condition_ids is predicted_ids
+
+
+def test_serial_state_token_rejects_wrong_oracle_shape():
+    predicted_ids = jnp.zeros((2, 3), dtype=jnp.int32)
+    with pytest.raises(ValueError, match="must match predicted state shape"):
+        _pi0.Pi0._resolve_action_condition_state_ids(  # noqa: SLF001
+            predicted_ids, jnp.zeros((2, 2), dtype=jnp.int32)
+        )

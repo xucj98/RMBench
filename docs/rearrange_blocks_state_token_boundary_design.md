@@ -379,6 +379,21 @@ state-query information 的 bottleneck。
 若 oracle-state 明显优于 predicted-state，瓶颈是 state 感知；若二者都差，瓶颈更可能在
 action 或 token 条件化机制。
 
+当前实现通过评测配置 `state_token_rollout_mode: predicted | oracle` 切换。`oracle` 仅允许
+Serial checkpoint，并遵循以下诊断契约：
+
+1. A block 中的 previous state 来自上一次 query 的 oracle state；
+2. B block 仍正常输出模型预测和 logits；
+3. C block 使用当前环境 oracle state，因此 action 完全以 GT current state 为条件；
+4. 每次 query 同时记录 `predicted_ids` 和实际用于控制的 `executed_ids`，便于后续计算分类
+   错误和 oracle gap。
+
+`rearrange_blocks` 的在线 oracle 不读取未来 expert 轨迹。它只读取仿真物理状态，并保持 phase
+单调：第一块已经正确放置且右夹爪释放后从 P0 进入 P1；一次有效按钮按压完成、释放且左臂回到初始位姿后从 P1
+进入 P2。`empty_mat_side` 直接取 episode task fact；P1 内按钮未确认/已确认分别由环境现有的
+`press_cnt/press_flag` 真值决定，P0/P2 使用 `NA`。这与离线 query-time state 的语义一致，
+同时避免用未来 frame 或演示时间索引作弊。
+
 ### 6.6 与 Mealy/Moore 的关系
 
 这个类比有帮助，但不完全等价。Parallel/Serial 更准确地说是联合预测与层级条件分解的

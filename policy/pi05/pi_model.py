@@ -20,13 +20,24 @@ KEY_STATE_CONFIG_RELATIVE_PATH = Path("metadata/rmbench_data_meta/key_state_conf
 
 class PI0:
 
-    def __init__(self, train_config_name, model_name, checkpoint_id, pi0_step, key_state_update_mode="raw"):
+    def __init__(
+        self,
+        train_config_name,
+        model_name,
+        checkpoint_id,
+        pi0_step,
+        key_state_update_mode="raw",
+        state_token_rollout_mode="predicted",
+    ):
         self.train_config_name = train_config_name
         self.model_name = model_name
         self.checkpoint_id = checkpoint_id
         if key_state_update_mode not in {"raw", "schema_latch"}:
             raise ValueError(f"Unsupported key_state_update_mode: {key_state_update_mode}")
         self.key_state_update_mode = key_state_update_mode
+        if state_token_rollout_mode not in {"predicted", "oracle"}:
+            raise ValueError(f"Unsupported state_token_rollout_mode: {state_token_rollout_mode}")
+        self.state_token_rollout_mode = state_token_rollout_mode
 
         self.checkpoint_dir = CHECKPOINT_ROOT / self.train_config_name / self.model_name / str(self.checkpoint_id)
         self.checkpoint_run_dir = self.checkpoint_dir.parent
@@ -40,6 +51,7 @@ class PI0:
         self.state_token_mode = getattr(config.model, "key_state_token_mode", "disabled")
         self.state_token_schema = []
         self.state_token_ids = None
+        self.state_token_prediction_ids = None
         self.state_history_size = int(getattr(config.data, "state_history_size", 0))
         self.state_sequence_length = self.state_history_size + 1
         self.state_history = deque(maxlen=self.state_sequence_length)
@@ -67,6 +79,8 @@ class PI0:
                 f"Missing key-state metadata for checkpoint {self.checkpoint_run_dir}: "
                 f"{self.key_state_config_path}"
             )
+        if self.state_token_rollout_mode == "oracle" and self.state_token_mode != "serial":
+            raise ValueError("oracle state-token rollout requires a serial state-token checkpoint")
 
         self.policy = _policy_config.create_trained_policy(
             config,
@@ -120,6 +134,7 @@ class PI0:
     def reset_key_state(self):
         if self.state_token_enabled:
             self.state_token_ids = np.zeros(len(self.state_token_schema), dtype=np.int32)
+            self.state_token_prediction_ids = self.state_token_ids.copy()
         if not self.key_state_enabled:
             self.key_state = None
             return
@@ -156,6 +171,29 @@ class PI0:
             )
         self.state_token_schema = schema
         self.key_state_task = (config.get("dataset") or {}).get("task")
+
+    def encode_state_token_values(self, values):
+        if not self.state_token_enabled:
+            raise ValueError("state-token values require a state-token checkpoint")
+        if not isinstance(values, dict):
+            raise TypeError(f"oracle state-token values must be a mapping, got {type(values).__name__}")
+        expected_names = [field["name"] for field in self.state_token_schema]
+        missing = [name for name in expected_names if name not in values]
+        extra = [name for name in values if name not in expected_names]
+        if missing or extra:
+            raise ValueError(f"oracle state-token fields mismatch: missing={missing}, extra={extra}")
+
+        encoded = []
+        for field in self.state_token_schema:
+            value = str(values[field["name"]])
+            try:
+                encoded.append(field["labels"].index(value))
+            except ValueError as exc:
+                raise ValueError(
+                    f"Unknown oracle value {value!r} for state field {field['name']!r}; "
+                    f"expected one of {field['labels']}"
+                ) from exc
+        return np.asarray(encoded, dtype=np.int32)
 
     def _requires_key_state_metadata(self):
         values = [
@@ -307,7 +345,7 @@ class PI0:
         if self.state_token_enabled:
             items = [
                 {"label": "task", "value": self.key_state_task or self.model_name},
-                {"label": "mode", "value": self.state_token_mode},
+                {"label": "mode", "value": self.state_token_mode + "/" + self.state_token_rollout_mode},
             ]
             for field, value in zip(self.state_token_schema, self.state_token_ids, strict=True):
                 index = int(value)
@@ -377,17 +415,35 @@ class PI0:
             "prompt": self.instruction,
         }
 
-    def get_action(self):
+    def get_action(self, oracle_state=None):
         assert self.observation_window is not None, "update observation_window first!"
-        outputs = self.policy.infer(self.observation_window)
+        key_state_override = None
+        if self.state_token_rollout_mode == "oracle":
+            if oracle_state is None:
+                raise ValueError("oracle state-token rollout requires current environment state")
+            key_state_override = self.encode_state_token_values(oracle_state)
+        outputs = self.policy.infer(self.observation_window, key_state_override=key_state_override)
         if self.state_token_enabled:
             state_token_ids = np.asarray(outputs["key_state"], dtype=np.int32)
-            if state_token_ids.shape != (len(self.state_token_schema),):
+            predicted_ids = np.asarray(outputs["key_state_prediction"], dtype=np.int32)
+            expected_shape = (len(self.state_token_schema),)
+            if state_token_ids.shape != expected_shape or predicted_ids.shape != expected_shape:
                 raise ValueError(
-                    f"Expected {len(self.state_token_schema)} state-token IDs, got {state_token_ids.shape}"
+                    "Expected state-token IDs and predictions with shape "
+                    f"{expected_shape}, got executed={state_token_ids.shape}, predicted={predicted_ids.shape}"
                 )
             self.state_token_ids = state_token_ids
+            self.state_token_prediction_ids = predicted_ids
         return outputs["actions"]
+
+    def get_state_token_diagnostics(self):
+        if not self.state_token_enabled:
+            return None
+        return {
+            "rollout_mode": self.state_token_rollout_mode,
+            "executed_ids": self.state_token_ids.tolist(),
+            "predicted_ids": self.state_token_prediction_ids.tolist(),
+        }
 
     def reset_obsrvationwindows(self):
         self.instruction = None

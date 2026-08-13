@@ -429,6 +429,18 @@ class Pi0(_model.BaseModel):
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
         return x_0
 
+    @staticmethod
+    def _resolve_action_condition_state_ids(selected_ids, action_condition_state_ids):
+        if action_condition_state_ids is None:
+            return selected_ids
+        condition_ids = jnp.asarray(action_condition_state_ids, dtype=jnp.int32)
+        if condition_ids.shape != selected_ids.shape:
+            raise ValueError(
+                "action_condition_state_ids must match predicted state shape: "
+                f"expected {selected_ids.shape}, got {condition_ids.shape}"
+            )
+        return condition_ids
+
     def sample_actions_with_key_state(
         self,
         rng: at.KeyArrayLike,
@@ -436,8 +448,14 @@ class Pi0(_model.BaseModel):
         *,
         num_steps: int | at.Int[at.Array, ""] = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
+        action_condition_state_ids: at.Int[at.Array, "b f"] | None = None,
     ) -> tuple[_model.Actions, jax.Array, jax.Array]:
-        """Sample actions and return the executed structured state decision."""
+        """Sample actions and return the model-predicted structured state.
+
+        ``action_condition_state_ids`` is an eval-only oracle hook. In serial
+        mode it replaces block C (the current-state tokens seen by the action
+        suffix) while leaving the state prediction and logits unchanged.
+        """
         if self.key_state_token_mode == "disabled":
             raise ValueError("sample_actions_with_key_state requires an enabled key-state token mode")
         observation = _model.preprocess_observation(None, observation, train=False)
@@ -458,7 +476,10 @@ class Pi0(_model.BaseModel):
         selected_ids = self._select_key_state(state_logits, observation.key_state_input_ids)
 
         if self.key_state_token_mode == "serial":
-            current_tokens = self._embed_key_state_values(selected_ids, segment_index=1)
+            condition_ids = self._resolve_action_condition_state_ids(
+                selected_ids, action_condition_state_ids
+            )
+            current_tokens = self._embed_key_state_values(condition_ids, segment_index=1)
             current_mask = jnp.ones(current_tokens.shape[:2], dtype=jnp.bool_)
             current_ar = jnp.array([True] + [False] * (current_tokens.shape[1] - 1))
             local_attn = make_attn_mask(current_mask, current_ar)

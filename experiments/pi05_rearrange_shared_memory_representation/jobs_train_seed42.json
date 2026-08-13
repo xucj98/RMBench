@@ -1,0 +1,33 @@
+{
+  "jobs": [
+    {
+      "name": "shared_memory_serial_soft_seed42",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_rearrange_state_token_boundary_ablation",
+        "--exp-name=shared_memory_serial_soft_seed42",
+        "--data.repo-id=rearrange_blocks_demo_clean_state_shared_memory",
+        "--model.key-state-token-mode=serial",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=42"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_multitask_shared_memory_representation",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/_formal_logs/shared_memory_serial_soft_seed42/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/_formal_logs/shared_memory_serial_soft_seed42/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    }
+  ]
+}

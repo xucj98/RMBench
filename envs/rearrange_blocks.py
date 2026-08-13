@@ -84,6 +84,7 @@ class rearrange_blocks(Base_Task):
         self.target_pose1 = blocks_pose[empty_mat]
         self.target_pose2 = blocks_pose[1]
         self.stage_id = 0
+        self._oracle_key_state_phase = 0
 
         self.first_empty_mat_name = ['left', 'null', 'right'][empty_mat]
         self.second_block_name = ['right', 'null', 'left'][empty_mat]
@@ -317,6 +318,54 @@ class rearrange_blocks(Base_Task):
                 )
                 return True
             return False
+
+    def _oracle_left_arm_returned(self):
+        current = np.asarray(self.get_arm_pose("left"), dtype=np.float32)[:3]
+        target = np.asarray(self.robot.left_original_pose, dtype=np.float32)[:3]
+        return bool(np.linalg.norm(current - target) < 0.04)
+
+    def get_oracle_key_state(self):
+        """Return the current structured memory from simulator task state.
+
+        The phase is monotonic. P1 starts after the first placement is
+        physically complete and released; P2 starts after one valid button
+        press has been released and the left arm has returned. This mirrors the query-time state semantics
+        used by the state-token dataset without using future trajectory data.
+        """
+        snapshot = self._get_rearrange_diagnostic_snapshot()
+        conditions = snapshot["conditions"]
+        if (
+            self._oracle_key_state_phase == 0
+            and conditions["first_placement_ready"]
+            and conditions["right_gripper_open"]
+        ):
+            self._oracle_key_state_phase = 1
+        if (
+            self._oracle_key_state_phase == 1
+            and self.stage_id >= 1
+            and self.press_cnt == 1
+            and not self.press_flag
+            and self._oracle_left_arm_returned()
+        ):
+            self._oracle_key_state_phase = 2
+
+        phase_labels = [
+            "move_middle_block_to_empty_mat",
+            "press_button_after_first_move",
+            "move_original_mat_block_to_middle",
+        ]
+        phase = phase_labels[self._oracle_key_state_phase]
+        if self._oracle_key_state_phase != 1:
+            button_status = "NA"
+        elif self.press_cnt == 1:
+            button_status = "confirmed"
+        else:
+            button_status = "unconfirmed"
+        return {
+            "phase": phase,
+            "empty_mat_side": self.first_empty_mat_name,
+            "button_press_status": button_status,
+        }
 
     def _get_primary_failure_reason(self, success, terminal, first_press):
         if success:
