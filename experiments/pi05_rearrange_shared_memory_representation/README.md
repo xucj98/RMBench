@@ -153,6 +153,12 @@ GPU6 与已有任务共享，manifest 固定 `XLA_PYTHON_CLIENT_MEM_FRACTION=0.5
 | 模型 | rollout state | train seed | eval seed | success |
 | --- | --- | ---: | ---: | ---: |
 | full key state | predicted | 0 | 0 | 93/100 |
-| full key state | oracle | 0 | 0 | running |
+| full key state | oracle | 0 | 0 | 82/100 |
 | serial-soft | predicted | 0 | 0 | 36/100 |
 | serial-soft | oracle | 0 | 0 | 79/100 |
+
+Full oracle 相比 full predicted 从 93/100 降到 82/100。两者第一次放置均为 100/100；
+有效按钮按压从 94/100 降到 87/100，第二次放置从 93/100 降到 82/100。Oracle 的
+18 次失败中 13 次发生在按钮动作、5 次发生在第二次搬运。因此 dense full 的环境 GT
+不是性能上界：action tail 中递推的 memory 更像与动作 chunk 对齐的计划/阶段时钟，改为
+物理确认后的 current-state GT 会改变闭环时序和输入分布。
