@@ -59,7 +59,7 @@ robot state/action 与原 token dataset 相同，且 token transform 会在 norm
 - token query stride：20
 - W&B project/group：`RMBench` / `pi05_rearrange_shared_memory_representation`
 
-两个 seed 0 历史 run、新增的 seed 42 run 以及对应 eval 均归入这个 rearrange 专用 group。
+两个 seed 0 历史 run、seed 42 复现 run、random-lag seed 0 run 以及对应 eval 均归入这个 rearrange 专用 group。
 曾短暂迁入的 `pi05_multitask_shared_memory_representation` group 已纠正；run ID、指标和
 checkpoint 不变。
 
@@ -112,6 +112,27 @@ python script/run_job_queue.py \
 - W&B run：`81pfcs8v`
 
 状态：2026-08-13 已在 GPU7 启动，30k 训练中。
+
+## Random previous-state lag（15–50）
+
+固定 `t-20` 会让 Serial 模型只看到一种 previous-state age。新增训练时动态采样：每次读取样本时
+从闭区间 `[15, 50]` 均匀采样整数 lag，并取同 episode 的 `state_target[t-lag]`；若历史不足，
+回退到 episode 初始 state。该变体继续使用同一个 shared-memory LeRobot dataset 和 norm stats，
+不改变 state target、action supervision 或 50-step action horizon。推理时也不随机：仍使用上一次
+实际 query 输出的 state，因此 `pi0_step` 决定真实 memory age。
+
+```bash
+python script/run_job_queue.py \
+  --jobs experiments/pi05_rearrange_shared_memory_representation/jobs_train_random_prev15_50_seed0.json \
+  --gpus 0 \
+  --state policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/_formal_logs/shared_memory_serial_soft_random_prev15_50_seed0/queue_state.json
+```
+
+产物：
+
+- `policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_random_prev15_50_seed0/30000`
+
+状态：2-step 真数据 smoke 已通过；正式训练配置已冻结，计划在 GPU0 启动。
 
 ## Serial oracle-state validation
 

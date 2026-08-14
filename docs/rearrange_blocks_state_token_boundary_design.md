@@ -212,8 +212,7 @@ embedding。这与语言模型共享 input embedding/LM head 权重的做法一�
 - rollout 时只携带模型自身上一次的预测，禁止使用环境真值回填。环境真值只允许出现在
   oracle 诊断中。
 
-若 rollout 固定每 `S` 个 control steps 查询一次，则离线 teacher-forced state 输入至少
-满足：
+若 rollout 固定每 `S` 个 control steps 查询一次，固定-lag 的离线 teacher forcing 为：
 
 ```text
 state_input[t]  = state_target[t - S],                 t - S >= episode_start
@@ -221,6 +220,18 @@ state_input[t]  = state_target[t - S],                 t - S >= episode_start
 state_target[t] = state_at_current_observation[t]
 ```
 
+固定 `S` 会让模型只看到单一 memory age。随机-lag 训练允许在 data config 中设置闭区间
+`key_state_previous_lag_range = (S_min, S_max)`；每次读取样本都重新采样：
+
+```text
+L_t ~ UniformInteger(S_min, ..., S_max)
+state_input[t]  = state_target[t - L_t],               t - L_t >= episode_start
+                = episode_initial_state,               otherwise
+```
+
+`rearrange_blocks` 的首个随机-lag 实验使用 `[15, 50]`。随机化仅作用于训练输入的
+previous-state token，不改变 current-state target、action supervision、action horizon、共享
+LeRobot dataset 或 norm stats；推理仍携带上一次真实 query 的模型输出，而不是人为采样 lag。
 实现时必须按 episode 边界初始化，禁止从上一条 episode 泄漏 previous state。这里不增加
 独立的 `S_init`：`S_prev/S_current` 只表达 token 在更新前还是更新后，初始化值由任务状态
 本身表达。未来若某任务没有已知初态，应使用显式 input-valid mask 或 input-only

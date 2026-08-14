@@ -62,6 +62,43 @@ class TransformedDataset(Dataset[T_co]):
         return len(self._dataset)
 
 
+class RandomPreviousKeyStateDataset(Dataset):
+    """Replace the fixed previous-state sidecar with a fresh random-lag target."""
+
+    _INPUT_KEY = "observation.key_state_input_ids"
+    _TARGET_KEY = "observation.key_state_target_ids"
+
+    def __init__(self, dataset, lag_range: tuple[int, int]):
+        min_lag, max_lag = (int(value) for value in lag_range)
+        if min_lag <= 0 or max_lag < min_lag:
+            raise ValueError(f"Invalid key-state previous lag range: {lag_range}")
+        required = {self._INPUT_KEY, self._TARGET_KEY}
+        missing = required.difference(dataset.hf_dataset.column_names)
+        if missing:
+            raise ValueError(f"Random previous key state requires dataset columns: {sorted(missing)}")
+        self._dataset = dataset
+        self._key_state_table = dataset.hf_dataset.select_columns(sorted(required))
+        self._min_lag = min_lag
+        self._max_lag = max_lag
+
+    def __getitem__(self, index: SupportsIndex):
+        sample_index = index.__index__()
+        sample = self._dataset[sample_index]
+        frame_index = int(np.asarray(sample["frame_index"]).reshape(-1)[0])
+        lag = int(torch.randint(self._min_lag, self._max_lag + 1, ()).item())
+        if frame_index >= lag:
+            source_index = sample_index - lag
+            source_key = self._TARGET_KEY
+        else:
+            source_index = sample_index - frame_index
+            source_key = self._INPUT_KEY
+        previous_ids = np.asarray(self._key_state_table[source_index][source_key], dtype=np.int64)
+        return {**sample, self._INPUT_KEY: previous_ids}
+
+    def __len__(self) -> int:
+        return len(self._dataset)
+
+
 class IterableTransformedDataset(IterableDataset[T_co]):
     def __init__(
         self,
@@ -150,6 +187,9 @@ def create_torch_dataset(
         data_config.repo_id,
         delta_timestamps=delta_timestamps,
     )
+
+    if data_config.key_state_previous_lag_range is not None:
+        dataset = RandomPreviousKeyStateDataset(dataset, data_config.key_state_previous_lag_range)
 
     if data_config.prompt_from_task:
         dataset = TransformedDataset(dataset, [_transforms.PromptFromLeRobotTask(dataset_meta.tasks)])

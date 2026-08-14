@@ -95,6 +95,10 @@ class DataConfig:
     state_future_size: int = 0
     state_step: int = 1
 
+    # Optional inclusive frame-lag range for dynamically sampling the previous
+    # structured key state during training. None preserves dataset sidecars.
+    key_state_previous_lag_range: tuple[int, int] | None = None
+
     # Only used for RLDS data loader (ie currently only used for DROID).
     rlds_data_dir: str | None = None
     # Action space for DROID dataset.
@@ -337,6 +341,7 @@ class LeRobotAlohaKeyStateTokenDataConfig(LeRobotAlohaDataConfig):
 
     hard_action_boundary: bool = False
     key_state_field_indices: tuple[int, ...] | None = None
+    key_state_previous_lag_range: tuple[int, int] | None = None
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -369,6 +374,7 @@ class LeRobotAlohaKeyStateTokenDataConfig(LeRobotAlohaDataConfig):
             data_transforms=data_transforms,
             model_transforms=ModelTransformFactory(default_prompt=self.default_prompt)(model_config),
             action_sequence_keys=self.action_sequence_keys,
+            key_state_previous_lag_range=self.key_state_previous_lag_range,
         )
 
 
