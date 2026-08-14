@@ -21,7 +21,8 @@ state/action 与离散 token sidecar。Full 路径读取完整 32D；serial 路�
 - batch size: 32
 - train steps: 30,000
 - action horizon: 50
-- token query stride: 20
+- serial previous-state lag（train）：`UniformInteger[15, 50]`
+- eval query stride：评测时单独配置
 - W&B project/group: `RMBench` / `pi05_multitask_shared_memory_representation`
 - full train config: 四个任务均为 `pi05_full_key_state`
 - serial train config: 四个任务均为 `pi05_multitask_state_token_serial_soft`
@@ -80,6 +81,37 @@ rearrange 的 seed 影响而全部中止。8 个 W&B run 和未完成 checkpoint
 | battery_try_serial_soft_seed0 | 6 | `a72dsvz0` | stopped/deleted |
 | cover_blocks_full_key_state_seed0 | 7 | `9416n4r2` | stopped/deleted |
 | cover_blocks_serial_soft_seed0 | 0 | `r5bu3qoc` | stopped/deleted |
+
+## 2026-08-14 重跑
+
+本轮继续复用表中的四个 shared-memory LeRobot repo；每个任务的 full 与 serial 读取同一份
+dataset。Serial 的 previous-state sidecar 在训练读取时被动态覆盖为同 episode 的
+`state_target[t-L]`，其中 `L ~ UniformInteger[15, 50]`，因此无需重新转换数据或计算 norm stats。
+
+为避免表示方法与机器完全绑定，每个任务的 full/serial 配对在同一台机器运行：
+
+| Machine | GPU | Runs |
+| --- | --- | --- |
+| local | 1,2,3,4 | put_back_block full/serial；swap_blocks full/serial |
+| wuwen-12 | 0,1,2,3 | battery_try full/serial；cover_blocks full/serial |
+
+本机：
+
+```bash
+python script/run_job_queue.py \
+  --jobs experiments/pi05_multitask_shared_memory_representation/jobs_train_local.json \
+  --gpus 1,2,3,4 \
+  --state policy/pi05/checkpoints/pi05_multitask_shared_memory_representation_rerun_local_queue_state.json
+```
+
+wuwen-12：
+
+```bash
+ssh wuwen-12 "cd /mnt/public3/xcj/RMBench && python script/run_job_queue.py \
+  --jobs experiments/pi05_multitask_shared_memory_representation/jobs_train_wuwen12.json \
+  --gpus 0,1,2,3 \
+  --state policy/pi05/checkpoints/pi05_multitask_shared_memory_representation_rerun_wuwen12_queue_state.json"
+```
 
 目标 checkpoint：
 
