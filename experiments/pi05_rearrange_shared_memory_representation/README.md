@@ -132,7 +132,8 @@ python script/run_job_queue.py \
 
 - `policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_random_prev15_50_seed0/30000`
 
-状态：2-step 真数据 smoke 已通过；正式训练配置已冻结，计划在 GPU0 启动。
+状态：2-step 真数据 smoke 已通过；2026-08-14 17:02 已在 GPU0 启动 30k 正式训练。
+W&B run：`hpwjlw42`；训练代码提交：`8c00b3f`。
 
 ## Serial oracle-state validation
 
