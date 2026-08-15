@@ -18,7 +18,7 @@ wandb project: RMBench
 wandb group: pi05_full_key_state_with_prop_history
 wandb mode: online
 train commit: 0f60a68c2deffd8ebc9f07df8122c1d00f50ac1f
-eval: pending
+eval: completed (100 rollouts per checkpoint)
 ```
 
 模型保留 Pi0.5 原有的当前 state 离散 prefix，并把完整 4 帧 state sequence 经独立投影送入 action-expert suffix。
@@ -79,16 +79,19 @@ policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/<task>/train.pid
 
 | Task | Repo ID | Status | GPU | wandb id | Checkpoint |
 | --- | --- | --- | ---: | --- | --- |
-| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | running (PID 401514) | 1 | [`iy84omxw`](https://wandb.ai/xucj98/RMBench/runs/iy84omxw) | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/rearrange_blocks` |
-| `put_back_block` | `put_back_block_demo_clean_state_key_state` | running (PID 401520) | 2 | [`fig03zgh`](https://wandb.ai/xucj98/RMBench/runs/fig03zgh) | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/put_back_block` |
+| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | finished | 1 | [`iy84omxw`](https://wandb.ai/xucj98/RMBench/runs/iy84omxw) | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/rearrange_blocks` |
+| `put_back_block` | `put_back_block_demo_clean_state_key_state` | finished | 2 | [`fig03zgh`](https://wandb.ai/xucj98/RMBench/runs/fig03zgh) | `policy/pi05/checkpoints/pi05_full_key_state_with_prop_history/put_back_block` |
 
 ## 评测
 
-```text
-eval_result/pi05_full_key_state_with_prop_history/<task>@ckpt30k
-```
+训练与 100-rollout diagnostics eval 均已完成：
 
-训练于 2026-08-02 启动，当前尚未启动评测；训练完成后补充评测命令和结果摘要。
+| Task | Checkpoint | Success | Result path |
+| --- | ---: | ---: | --- |
+| `rearrange_blocks` | 20k | 27/100 | `eval_result/pi05_full_key_state_with_prop_history/rearrange_blocks@ckpt20k_diagnostics` |
+| `rearrange_blocks` | 30k | 28/100 | `eval_result/pi05_full_key_state_with_prop_history/rearrange_blocks@ckpt30k_diagnostics` |
+| `put_back_block` | 20k | 44/100 | `eval_result/pi05_full_key_state_with_prop_history/put_back_block@ckpt20k_diagnostics` |
+| `put_back_block` | 30k | 41/100 | `eval_result/pi05_full_key_state_with_prop_history/put_back_block@ckpt30k_diagnostics` |
 
 ### Prop-history 时序审计
 

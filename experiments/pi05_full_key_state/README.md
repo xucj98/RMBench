@@ -8,7 +8,7 @@ swap_blocks
 battery_try
 ```
 
-这两个任务复用 `pi0_key_state_baseline` 已生成的 LeRobot key-state 数据，不重新生成
+这三个任务复用 `pi0_key_state_baseline` 已生成的 LeRobot key-state 数据，不重新生成
 RMBench demo，也不重新转换数据。
 
 ## 实验范围
@@ -23,7 +23,7 @@ gpu: one run per GPU
 xla_mem_fraction: 0.95
 wandb project: RMBench
 wandb group: pi05_full_key_state
-eval: pending
+eval: completed
 ```
 
 ## 数据和 Assets
@@ -56,9 +56,9 @@ policy/pi05/checkpoints/full_key_state/<exp_name>
 
 | Task | Repo ID | GPU | Status | wandb id | Checkpoint | stdout |
 | --- | --- | ---: | --- | --- | --- | --- |
-| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | 6 | running | `pdsniduh` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_rearrange_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_rearrange_blocks.stdout.log` |
-| `swap_blocks` | `swap_blocks_demo_clean_state_key_state` | 0 | running | `65ldopff` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_swap_blocks.stdout.log` |
-| `battery_try` | `battery_try_demo_clean_state_key_state` | 7 | running | `2mueiwio` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try` | `policy/pi05/logs/full_key_state/pi05_full_key_state_battery_try.stdout.log` |
+| `rearrange_blocks` | `rearrange_blocks_demo_clean_state_key_state` | 6 | finished | `pdsniduh` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_rearrange_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_rearrange_blocks.stdout.log` |
+| `swap_blocks` | `swap_blocks_demo_clean_state_key_state` | 0 | finished | `65ldopff` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_swap_blocks` | `policy/pi05/logs/full_key_state/pi05_full_key_state_swap_blocks.stdout.log` |
+| `battery_try` | `battery_try_demo_clean_state_key_state` | 7 | finished | `2mueiwio` | `policy/pi05/checkpoints/full_key_state/pi05_full_key_state_battery_try` | `policy/pi05/logs/full_key_state/pi05_full_key_state_battery_try.stdout.log` |
 
 训练命令、git commit、cwd、环境变量和 resolved train config 由 checkpoint metadata
 自动记录；README 不重复手写这些字段。
@@ -95,4 +95,11 @@ eval_result/pi05_full_key_state_repro/
   rearrange_blocks_repro_eddfff7_seed42@ckpt30k_step<N>_100ep_seed<S>/
 ```
 
-状态：step50 completed；step15/20/30 running。
+状态：8 项 100-rollout eval 均已完成。
+
+| pi0_step | eval seed0 | eval seed1 | mean |
+| ---: | ---: | ---: | ---: |
+| 15 | 12/100 | 15/100 | 13.5% |
+| 20 | 16/100 | 13/100 | 14.5% |
+| 30 | 46/100 | 40/100 | 43.0% |
+| 50 | 38/100 | 46/100 | 42.0% |
