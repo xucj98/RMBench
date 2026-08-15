@@ -111,12 +111,17 @@ python script/run_job_queue.py \
 - `policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_seed42/30000`
 - W&B run：`81pfcs8v`
 
-状态：30k 训练已于 2026-08-14 23:15 完成，checkpoint 完整；step30 的 eval seed0/seed1 待启动。
+状态：30k 训练已于 2026-08-14 23:15 完成，checkpoint 完整；step30 的 eval seed0/seed1 已于 2026-08-15 16:50 启动。
 
 评测 manifests：
 
 - `jobs_eval_seed42_step30_seed0.json`
 - `jobs_eval_seed42_step30_seed1.json`
+
+正式评测：
+
+- eval seed0：GPU5，W&B `a2l344jr`，running；
+- eval seed1：GPU6，W&B `74ry0mk8`，running。
 
 ## Random previous-state lag（15–50）
 
