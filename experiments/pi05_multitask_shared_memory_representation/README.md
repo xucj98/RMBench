@@ -118,14 +118,14 @@ ssh wuwen-12 env -C /mnt/public3/xcj/RMBench \
 
 | Task | Representation | Machine / GPU | W&B ID | 状态 |
 | --- | --- | --- | --- | --- |
-| put_back_block | full | local / 1 | `aesgn3fb` | running |
-| put_back_block | serial `[15,50]` | local / 2 | `hr23cdjm` | running |
-| swap_blocks | full | local / 3 | `rr5u4p31` | running |
-| swap_blocks | serial `[15,50]` | local / 4 | `z3eyul6n` | running |
-| battery_try | full | wuwen-12 / 0 | `6bok8prj` | running |
-| battery_try | serial `[15,50]` | wuwen-12 / 1 | `1zow6099` | running |
-| cover_blocks | full | wuwen-12 / 2 | `ni3wxpts` | running |
-| cover_blocks | serial `[15,50]` | wuwen-12 / 3 | `v3l6tp4i` | running |
+| put_back_block | full | local / 1 | `aesgn3fb` | finished |
+| put_back_block | serial `[15,50]` | local / 2 | `hr23cdjm` | finished |
+| swap_blocks | full | local / 3 | `rr5u4p31` | finished |
+| swap_blocks | serial `[15,50]` | local / 4 | `z3eyul6n` | finished |
+| battery_try | full | wuwen-12 / 0 | `6bok8prj` | finished |
+| battery_try | serial `[15,50]` | wuwen-12 / 1 | `1zow6099` | finished |
+| cover_blocks | full | wuwen-12 / 2 | `ni3wxpts` | finished |
+| cover_blocks | serial `[15,50]` | wuwen-12 / 3 | `v3l6tp4i` | finished |
 
 wuwen-12 首次启动时因运行副本缺少未跟踪的 norm-stats assets，在进入训练 step 前失败；
 四个失败 W&B run、checkpoint metadata 和日志均已删除。同步 assets 并逐文件校验 SHA-256 后
@@ -149,4 +149,21 @@ policy/pi05/checkpoints/pi05_multitask_state_token_serial_soft/<task>_serial_sof
 - norm stats: ready and dimension-checked for 8/8 model/task combinations
 - 2-step, bs=32 train smoke: 8/8 passed
 - formal 30k training（2026-08-13）：cancelled; 8 W&B runs and partial checkpoint metadata removed
-- formal 30k rerun（2026-08-14）：8/8 running; local 4 + wuwen-12 4
+- formal 30k rerun（2026-08-14）：8/8 finished; local 4 + wuwen-12 4
+
+## 正式评测
+
+8 个模型均使用 checkpoint 30k、`pi0_step=30`、100 rollouts，并分别运行 eval seed0/seed1，
+共 16 项；另将 rearrange random-lag 的 2 项一并放入同一队列，共 18 项。2026-08-18 12:18 CST
+在 wuwen-12 GPU0–3 启动：
+
+```bash
+ssh wuwen-12 env -C /mnt/public3/xcj/RMBench \
+  /mnt/public3/xcj/RMBench/policy/pi05/.venv/bin/python script/run_job_queue.py \
+  --jobs experiments/pi05_multitask_shared_memory_representation/jobs_eval_all_shared_models_step30_seed0_seed1.json \
+  --gpus 0,1,2,3 \
+  --state eval_result/pi05_multitask_shared_memory_representation/_all_shared_models_step30_seed0_seed1_queue_state.json
+```
+
+队列按同一模型的两个 eval seed 相邻排列。首批运行 rearrange random-lag seed0/seed1 与
+put_back_block full seed0/seed1；每项结束后自动续跑剩余任务。

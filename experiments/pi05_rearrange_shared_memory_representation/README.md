@@ -111,7 +111,8 @@ python script/run_job_queue.py \
 - `policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_seed42/30000`
 - W&B run：`81pfcs8v`
 
-状态：30k 训练已于 2026-08-14 23:15 完成，checkpoint 完整；step30 的 eval seed0/seed1 已于 2026-08-15 16:50 启动。
+状态：30k 训练已于 2026-08-14 23:15 完成，checkpoint 完整；step30 的 eval seed0/seed1
+已于 2026-08-15 18:53 完成，成功率分别为 24/100 与 26/100。
 
 评测 manifests：
 
@@ -120,8 +121,8 @@ python script/run_job_queue.py \
 
 正式评测：
 
-- eval seed0：GPU5，W&B `a2l344jr`，running；
-- eval seed1：GPU6，W&B `74ry0mk8`，running。
+- eval seed0：GPU5，W&B `a2l344jr`，24/100，finished；
+- eval seed1：GPU6，W&B `74ry0mk8`，26/100，finished。
 
 ## Random previous-state lag（15–50）
 
@@ -142,8 +143,10 @@ python script/run_job_queue.py \
 
 - `policy/pi05/checkpoints/pi05_rearrange_state_token_boundary_ablation/shared_memory_serial_soft_random_prev15_50_seed0/30000`
 
-状态：2-step 真数据 smoke 已通过；2026-08-14 17:02 已在 GPU0 启动 30k 正式训练。
-W&B run：`hpwjlw42`；训练代码提交：`8c00b3f`。
+状态：2-step 真数据 smoke 已通过；30k 正式训练已完成，checkpoint 完整。
+W&B run：`hpwjlw42`；训练代码提交：`8c00b3f`。step30、100-rollout 的 eval seed0/seed1
+已于 2026-08-18 12:18 在 wuwen-12 GPU0/1 启动，统一队列 manifest 为
+`../pi05_multitask_shared_memory_representation/jobs_eval_all_shared_models_step30_seed0_seed1.json`。
 
 ## Serial oracle-state validation
 
