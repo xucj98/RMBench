@@ -167,3 +167,8 @@ ssh wuwen-12 env -C /mnt/public3/xcj/RMBench \
 
 队列按同一模型的两个 eval seed 相邻排列。首批运行 rearrange random-lag seed0/seed1 与
 put_back_block full seed0/seed1；每项结束后自动续跑剩余任务。
+
+2026-08-18 17:03 CST，原队列完成 7 项、运行 4 项、等待 7 项时，将等待项迁移到本机。
+仅停止 wuwen-12 的协调器；4 个已启动的 eval 以独立 session 继续运行，未被中断。剩余 7 项
+使用 `jobs_eval_pending7_local.json` 在本机 GPU0–6 同时启动，状态文件为
+`eval_result/pi05_multitask_shared_memory_representation/_pending7_local_queue_state.json`。
