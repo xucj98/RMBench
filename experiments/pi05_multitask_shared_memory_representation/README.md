@@ -172,3 +172,41 @@ put_back_block full seed0/seed1；每项结束后自动续跑剩余任务。
 仅停止 wuwen-12 的协调器；4 个已启动的 eval 以独立 session 继续运行，未被中断。剩余 7 项
 使用 `jobs_eval_pending7_local.json` 在本机 GPU0–6 同时启动，状态文件为
 `eval_result/pi05_multitask_shared_memory_representation/_pending7_local_queue_state.json`。
+
+## 完成结果
+
+30k checkpoint、`pi0_step=30`、eval seed0/1 各100 rollouts：
+
+| Task | Full seed0/1（mean） | Serial `[15,50]` seed0/1（mean） | Serial - Full |
+| --- | ---: | ---: | ---: |
+| put_back_block | 56% / 53%（54.5%） | 90% / 86%（88.0%） | +33.5 pp |
+| swap_blocks | 87% / 93%（90.0%） | 83% / 81%（82.0%） | -8.0 pp |
+| battery_try | 33% / 28%（30.5%） | 29% / 29%（29.0%） | -1.5 pp |
+| cover_blocks | 14% / 14%（14.0%） | 45% / 43%（44.0%） | +30.0 pp |
+
+18项联合评测（含 rearrange random-lag 两个 eval seed）全部完成，18/18 succeeded、0 failed。
+rearrange random-lag 的 seed0/seed1 为27%/34%，均值30.5%。
+
+## Fixed `t-20` seed0 ablation
+
+为单独测量 previous-state 随机采样的影响，在当前 shared-memory repo、当前代码和 train seed0
+下补训四个 fixed `t-20` Serial。训练命令不设置 `key_state_previous_lag_range`，因此直接读取
+shared dataset 中 converter 按 `query_stride=20` 保存的 `state_input[t]=state_target[t-20]`。
+除 lag 外，与 `[15,50]` 四个模型保持相同的 train config、token category counts、30k steps 和 bs32。
+
+```bash
+python script/run_job_queue.py \
+  --jobs experiments/pi05_multitask_shared_memory_representation/jobs_train_fixed_prev20_seed0.json \
+  --gpus 0,1,2,3,4,5,6,7 \
+  --state policy/pi05/checkpoints/pi05_multitask_shared_memory_representation_fixed_prev20_seed0_queue_state.json
+```
+
+| Task | Run | 状态 |
+| --- | --- | --- |
+| put_back_block | `put_back_block_serial_soft_fixed_prev20_seed0` | pending |
+| swap_blocks | `swap_blocks_serial_soft_fixed_prev20_seed0` | pending |
+| battery_try | `battery_try_serial_soft_fixed_prev20_seed0` | pending |
+| cover_blocks | `cover_blocks_serial_soft_fixed_prev20_seed0` | pending |
+
+2026-08-20 00:34 CST 检查时本机8张卡均被其他不可见 PID 的任务占满。队列使用全部8张卡作为
+候选池，只会在某卡连续两次满足空闲阈值后启动，最先空出的四张卡各运行一个模型。
