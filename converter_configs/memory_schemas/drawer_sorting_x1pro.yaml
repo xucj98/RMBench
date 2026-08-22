@@ -1,0 +1,29 @@
+version: 1
+fields:
+  - name: drawer_target
+    kind: cyclic_attribute
+    initial_value: observe
+    labels: [observe, item_1, item_2, item_3]
+    annotation:
+      relative_path: anno/sort.json
+      observe_labels:
+        "1": item_1
+        "2": item_2
+        "3": item_3
+      execution_labels:
+        "4": item_1
+        "5": item_2
+        "6": item_3
+      range_semantics: half_open
+    transitions:
+      observe: [observe, item_1, item_2, item_3]
+      item_1: [item_1, observe]
+      item_2: [item_2, observe]
+      item_3: [item_3, observe]
+    missing_observation:
+      # 4/5/6 remain valid action demonstrations. Their input memory is
+      # overridden to the matching known item instead of teaching an
+      # unsupported observe -> item transition from an uninformative frame.
+      execution_input: matching_item
+      serial_target: matching_item_hold
+      full_memory_action_loss: masked_during_forced_execution

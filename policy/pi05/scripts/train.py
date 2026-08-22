@@ -1,5 +1,6 @@
 import dataclasses
 import functools
+import json
 import logging
 import os
 import pathlib
@@ -18,6 +19,7 @@ import jax
 import jax.experimental
 import jax.numpy as jnp
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
+from lerobot.common.datasets.lerobot_dataset import LeRobotDatasetMetadata
 import optax
 import tqdm_loggable.auto as tqdm
 import wandb
@@ -41,6 +43,7 @@ RMBENCH_META_FILES = [
     "source_data_config.yaml",
     "source_data_command.txt",
 ]
+RMBENCH_OPTIONAL_META_FILES = ["conversion_audit.json"]
 
 
 def init_logging():
@@ -176,6 +179,27 @@ def _write_train_run_metadata(config: _config.TrainConfig) -> None:
     paths_to_upload = [train_config_path, command_path]
     repo_id = getattr(config.data, "repo_id", None)
     if repo_id and repo_id != "fake":
+        dataset_snapshots = []
+        for current_repo_id in (item.strip() for item in repo_id.split(",") if item.strip()):
+            dataset_meta = LeRobotDatasetMetadata(current_repo_id)
+            entry = {
+                "repo_id": current_repo_id,
+                "root": str(dataset_meta.root),
+                "fps": dataset_meta.fps,
+                "total_episodes": dataset_meta.total_episodes,
+                "features": dataset_meta.info.get("features", {}),
+            }
+            memory_layout = dataset_meta.root / "meta" / "key_state" / "phase_layout.json"
+            if memory_layout.is_file():
+                entry["key_state"] = json.loads(memory_layout.read_text(encoding="utf-8"))
+            dataset_snapshots.append(entry)
+        dataset_snapshot_path = metadata_dir / "datasets.json"
+        dataset_snapshot_path.write_text(
+            json.dumps({"schema_version": 1, "datasets": dataset_snapshots}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        paths_to_upload.append(dataset_snapshot_path)
+
         source_meta_dir = pathlib.Path(HF_LEROBOT_HOME) / repo_id / "meta" / "rmbench"
         if source_meta_dir.exists():
             target_meta_dir = metadata_dir / "rmbench_data_meta"
@@ -187,6 +211,12 @@ def _write_train_run_metadata(config: _config.TrainConfig) -> None:
                 target = target_meta_dir / name
                 shutil.copy2(source, target)
                 paths_to_upload.append(target)
+            for name in RMBENCH_OPTIONAL_META_FILES:
+                source = source_meta_dir / name
+                if source.exists():
+                    target = target_meta_dir / name
+                    shutil.copy2(source, target)
+                    paths_to_upload.append(target)
         elif "key_state" in config.name:
             raise FileNotFoundError(f"Missing RMBench dataset metadata directory: {source_meta_dir}")
 
@@ -414,6 +444,7 @@ def main(config: _config.TrainConfig):
                 data_loader,
                 checkpoint_step,
                 save_train_state=config.save_train_state,
+                metadata_dir=config.checkpoint_dir / "metadata",
             )
 
     logging.info("Waiting for checkpoint manager to finish")

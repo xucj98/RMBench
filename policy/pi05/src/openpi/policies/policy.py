@@ -70,12 +70,19 @@ class Policy(BasePolicy):
                 self._key_state_num_fields = len(self._key_state_num_values)
                 if self._key_state_num_fields <= 0:
                     raise ValueError("key-state token model must define at least one field")
-                self._key_state_previous = np.zeros(self._key_state_num_fields, dtype=np.int32)
+                configured_initial = getattr(model, "key_state_initial_ids", None)
+                self._key_state_initial = np.asarray(
+                    configured_initial if configured_initial is not None else [0] * self._key_state_num_fields,
+                    dtype=np.int32,
+                )
+                if self._key_state_initial.shape != (self._key_state_num_fields,):
+                    raise ValueError("key-state initial ids must contain one value per field")
+                self._key_state_previous = self._key_state_initial.copy()
 
     @override
     def reset(self) -> None:
         if getattr(self, "_key_state_token_enabled", False):
-            self._key_state_previous = np.zeros(self._key_state_num_fields, dtype=np.int32)
+            self._key_state_previous = self._key_state_initial.copy()
 
     def _validate_key_state_override(self, value: np.ndarray) -> np.ndarray:
         override = np.asarray(value, dtype=np.int32)
@@ -84,9 +91,7 @@ class Policy(BasePolicy):
                 "key_state_override must have one value per state field: "
                 f"expected {(self._key_state_num_fields,)}, got {override.shape}"
             )
-        for field_index, (field_value, num_values) in enumerate(
-            zip(override, self._key_state_num_values, strict=True)
-        ):
+        for field_index, (field_value, num_values) in enumerate(zip(override, self._key_state_num_values, strict=True)):
             if not 0 <= int(field_value) < num_values:
                 raise ValueError(
                     f"key_state_override field {field_index} is out of range: "

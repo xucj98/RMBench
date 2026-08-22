@@ -285,7 +285,7 @@ def create_data_loader(
         skip_norm_stats: Whether to skip data normalization.
         framework: The framework to use ("jax" or "pytorch").
     """
-    data_config = config.data.create(config.assets_dirs, config.model)
+    data_config = config.data.create_for_training(config.assets_dirs, config.model)
     logging.info(f"data_config: {data_config}")
 
     if data_config.rlds_data_dir is not None:

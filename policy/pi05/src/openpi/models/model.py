@@ -68,6 +68,7 @@ IMAGE_RESOLUTION = (224, 224)
 #     "tokenized_prompt_mask": bool[*b, l],  # Optional, mask for tokenized prompt
 #     "token_ar_mask": int32[*b, l],  # Optional, autoregressive mask for FAST model
 #     "token_loss_mask": bool[*b, l],  # Optional, loss mask for FAST model
+#     "action_loss_mask": bool[*b, ah, ad],  # Optional per-action-dimension loss mask
 #
 #      # Actions data.
 #      "actions": float32[*b ah ad]
@@ -114,6 +115,10 @@ class Observation(Generic[ArrayT]):
     key_state_input_ids: at.Int[ArrayT, "*b f"] | None = None
     key_state_target_ids: at.Int[ArrayT, "*b f"] | None = None
     key_state_target_mask: at.Bool[ArrayT, "*b f"] | None = None
+    # Optional mask for continuous action supervision. This lives on the
+    # observation because ``actions`` remains the model target returned
+    # separately by the data loader.
+    action_loss_mask: at.Bool[ArrayT, "*b ah ad"] | None = None
 
     @classmethod
     def from_dict(cls, data: at.PyTree[ArrayT]) -> "Observation[ArrayT]":
@@ -138,6 +143,7 @@ class Observation(Generic[ArrayT]):
             key_state_input_ids=data.get("key_state_input_ids"),
             key_state_target_ids=data.get("key_state_target_ids"),
             key_state_target_mask=data.get("key_state_target_mask"),
+            action_loss_mask=data.get("action_loss_mask"),
         )
 
     def to_dict(self) -> at.PyTree[ArrayT]:
@@ -145,7 +151,7 @@ class Observation(Generic[ArrayT]):
         result = dataclasses.asdict(self)
         result["image"] = result.pop("images")
         result["image_mask"] = result.pop("image_masks")
-        for key in ("key_state_input_ids", "key_state_target_ids", "key_state_target_mask"):
+        for key in ("key_state_input_ids", "key_state_target_ids", "key_state_target_mask", "action_loss_mask"):
             if result[key] is None:
                 result.pop(key)
         return result
@@ -223,6 +229,7 @@ def preprocess_observation(
         key_state_input_ids=observation.key_state_input_ids,
         key_state_target_ids=observation.key_state_target_ids,
         key_state_target_mask=observation.key_state_target_mask,
+        action_loss_mask=observation.action_loss_mask,
     )
 
 

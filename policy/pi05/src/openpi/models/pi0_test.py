@@ -1,3 +1,5 @@
+import dataclasses
+
 import flax.nnx as nnx
 import jax
 import jax.numpy as jnp
@@ -69,6 +71,27 @@ def test_disabled_config_has_no_key_state_params():
     )
     state = nnx.state(config.create(jax.random.key(0))).flat_state()
     assert all("key_state_token" not in "/".join(path) for path in state)
+
+
+def test_action_loss_mask_can_remove_all_continuous_supervision():
+    config = _pi0_config.Pi0Config(
+        pi05=True,
+        paligemma_variant="dummy",
+        action_expert_variant="dummy",
+        action_dim=14,
+        action_horizon=4,
+        max_token_len=8,
+        use_action_loss_mask=True,
+    )
+    model = config.create(jax.random.key(0))
+    observation = dataclasses.replace(
+        config.fake_obs(batch_size=2),
+        action_loss_mask=jnp.zeros((2, 4, 14), dtype=jnp.bool_),
+    )
+
+    loss = model.compute_loss(jax.random.key(1), observation, config.fake_act(batch_size=2))
+
+    assert not loss.any()
 
 
 @pytest.mark.parametrize("mode", ["parallel", "serial"])
@@ -148,6 +171,7 @@ def test_key_state_transition_mask():
     previous = jnp.asarray([[0, 0, 0]], dtype=jnp.int32)
     # P0 cannot skip to P2; entering P1 forces button=unconfirmed.
     assert model._select_key_state(logits, previous).tolist() == [[1, 1, 1]]  # noqa: SLF001
+
 
 def test_serial_state_token_accepts_oracle_action_condition():
     predicted_ids = jnp.asarray([[0, 0, 0], [1, 2, 1]], dtype=jnp.int32)

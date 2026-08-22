@@ -83,6 +83,8 @@ class Pi0(_model.BaseModel):
         self.key_state_token_mode = config.key_state_token_mode
         self.key_state_num_values = config.key_state_num_values
         self.key_state_loss_weight = config.key_state_loss_weight
+        self.key_state_allowed_transitions = config.key_state_allowed_transitions
+        self.key_state_initial_ids = config.key_state_initial_ids
         paligemma_config = _gemma.get_config(config.paligemma_variant)
         action_expert_config = _gemma.get_config(config.action_expert_variant)
         # TODO: rewrite gemma in NNX. For now, use bridge.
@@ -212,6 +214,18 @@ class Pi0(_model.BaseModel):
             raise ValueError("key-state schema must contain at least one field")
         previous_ids = jnp.asarray(previous_ids, dtype=jnp.int32)
         class_ids = jnp.arange(logits.shape[-1])[None, :]
+
+        if self.key_state_allowed_transitions is not None:
+            selected = []
+            for field_index, (_field_size, rows) in enumerate(
+                zip(schema, self.key_state_allowed_transitions, strict=True)
+            ):
+                transition_table = [
+                    [class_id in allowed_values for class_id in range(logits.shape[-1])] for allowed_values in rows
+                ]
+                legal = jnp.asarray(transition_table, dtype=jnp.bool_)[previous_ids[:, field_index]]
+                selected.append(jnp.argmax(jnp.where(legal, logits[:, field_index], -jnp.inf), axis=-1))
+            return jnp.stack(selected, axis=-1).astype(jnp.int32)
 
         phase_size = schema[0]
         previous_phase = previous_ids[:, 0]
@@ -352,7 +366,17 @@ class Pi0(_model.BaseModel):
             [prefix_tokens, suffix_tokens], mask=attn_mask, positions=positions, adarms_cond=[None, adarms_cond]
         )
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
-        action_loss = jnp.mean(jnp.square(v_t - u_t), axis=-1)
+        squared_error = jnp.square(v_t - u_t)
+        if observation.action_loss_mask is None:
+            action_loss = jnp.mean(squared_error, axis=-1)
+        else:
+            action_loss_mask = jnp.asarray(observation.action_loss_mask, dtype=squared_error.dtype)
+            if action_loss_mask.shape != squared_error.shape:
+                raise ValueError(
+                    f"action_loss_mask shape {action_loss_mask.shape} must match actions {squared_error.shape}"
+                )
+            valid_dims = jnp.sum(action_loss_mask, axis=-1)
+            action_loss = jnp.sum(squared_error * action_loss_mask, axis=-1) / jnp.maximum(valid_dims, 1.0)
         if self.key_state_token_mode == "disabled":
             return action_loss
 
@@ -476,9 +500,7 @@ class Pi0(_model.BaseModel):
         selected_ids = self._select_key_state(state_logits, observation.key_state_input_ids)
 
         if self.key_state_token_mode == "serial":
-            condition_ids = self._resolve_action_condition_state_ids(
-                selected_ids, action_condition_state_ids
-            )
+            condition_ids = self._resolve_action_condition_state_ids(selected_ids, action_condition_state_ids)
             current_tokens = self._embed_key_state_values(condition_ids, segment_index=1)
             current_mask = jnp.ones(current_tokens.shape[:2], dtype=jnp.bool_)
             current_ar = jnp.array([True] + [False] * (current_tokens.shape[1] - 1))

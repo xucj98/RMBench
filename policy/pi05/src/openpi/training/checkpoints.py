@@ -4,6 +4,8 @@ import asyncio
 import concurrent.futures as futures
 import dataclasses
 import logging
+import pathlib
+import shutil
 from typing import Protocol
 
 from etils import epath
@@ -46,6 +48,7 @@ def initialize_checkpoint_dir(
         checkpoint_dir,
         item_handlers={
             "assets": CallbackHandler(),
+            "metadata": CallbackHandler(),
             "train_state": ocp.PyTreeCheckpointHandler(),
             "params": ocp.PyTreeCheckpointHandler(),
         },
@@ -82,6 +85,7 @@ def save_state(
     step: int,
     *,
     save_train_state: bool = False,
+    metadata_dir: epath.Path | str | None = None,
 ):
     def save_assets(directory: epath.Path):
         # Save the normalization stats.
@@ -90,11 +94,27 @@ def save_state(
         if norm_stats is not None and data_config.asset_id is not None:
             _normalize.save(directory / data_config.asset_id, norm_stats)
 
+    def save_metadata(directory: epath.Path):
+        if metadata_dir is None:
+            return
+        source_dir = pathlib.Path(str(metadata_dir))
+        target_dir = pathlib.Path(str(directory))
+        if not source_dir.is_dir():
+            raise FileNotFoundError(f"Training metadata directory does not exist: {source_dir}")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for source in source_dir.iterdir():
+            target = target_dir / source.name
+            if source.is_dir():
+                shutil.copytree(source, target, dirs_exist_ok=True)
+            else:
+                shutil.copy2(source, target)
+
     # Split params that can be used for inference into a separate item.
     with at.disable_typechecking():
         train_state, params = _split_params(state)
     items = {
         "assets": save_assets,
+        "metadata": save_metadata,
         "params": {"params": params},
     }
     if save_train_state:

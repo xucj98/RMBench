@@ -54,3 +54,24 @@ def test_multitask_state_token_serial_soft_uses_one_shared_config():
     repack_structure = config.data.repack_transforms.inputs[0].structure
     assert "key_state_guard_offset" not in repack_structure
     assert config.policy_metadata is None
+
+
+def test_x1pro_drawer_sorting_configs_share_dataset_and_timing_contract():
+    full = _config.get_config("pi05_x1pro_drawer_sorting_full_state")
+    serial = _config.get_config("pi05_x1pro_drawer_sorting_serial_soft")
+
+    assert full.data.repo_id == serial.data.repo_id == "drawer_sorting_x1pro_shared_memory_sm2sm_15hz"
+    assert full.model.action_horizon == serial.model.action_horizon == 30
+    assert full.data.state_history_size == serial.data.state_history_size == 3
+    assert full.data.state_future_size == serial.data.state_future_size == 3
+    assert full.data.representation == "full_state"
+    assert serial.data.representation == "state_token"
+    assert full.model.use_action_loss_mask
+    assert not serial.model.use_action_loss_mask
+    assert serial.model.key_state_token_mode == "serial"
+    assert serial.model.key_state_num_values == (4,)
+    assert serial.model.key_state_initial_ids == (0,)
+    assert serial.model.key_state_allowed_transitions == (((0, 1, 2, 3), (0, 1), (0, 2), (0, 3)),)
+    assert full.policy_metadata["batch_id"] == serial.policy_metadata["batch_id"]
+    assert full.policy_metadata["x2robot"]["source_fps"] == 30
+    assert full.policy_metadata["x2robot"]["target_fps"] == 15

@@ -43,6 +43,14 @@ class Pi0Config(_model.BaseModelConfig):
     key_state_token_mode: str = "disabled"
     key_state_num_values: tuple[int, ...] = (3, 3, 3)
     key_state_loss_weight: float = 0.1
+    # Optional per-field transition rows. Each row lists the category ids that
+    # may follow the previous category with the same row index. None preserves
+    # the legacy monotonic-phase/latching-attribute behavior.
+    key_state_allowed_transitions: tuple[tuple[tuple[int, ...], ...], ...] | None = None
+    key_state_initial_ids: tuple[int, ...] | None = None
+    # Opt-in elementwise action loss mask. Disabled keeps the legacy loss path
+    # numerically identical for all existing configs.
+    use_action_loss_mask: bool = False
 
     def __post_init__(self):
         if self.max_token_len is None:
@@ -61,6 +69,24 @@ class Pi0Config(_model.BaseModelConfig):
             raise ValueError("key_state_num_values must contain at least one field")
         if any(size <= 0 for size in self.key_state_num_values):
             raise ValueError("all key_state_num_values entries must be positive")
+        if self.key_state_initial_ids is not None:
+            if len(self.key_state_initial_ids) != len(self.key_state_num_values):
+                raise ValueError("key_state_initial_ids must contain one value per field")
+            if any(
+                not 0 <= value < size
+                for value, size in zip(self.key_state_initial_ids, self.key_state_num_values, strict=True)
+            ):
+                raise ValueError("key_state_initial_ids contains an out-of-range category")
+        if self.key_state_allowed_transitions is not None:
+            if len(self.key_state_allowed_transitions) != len(self.key_state_num_values):
+                raise ValueError("key_state_allowed_transitions must contain one transition table per field")
+            for field_size, rows in zip(self.key_state_num_values, self.key_state_allowed_transitions, strict=True):
+                if len(rows) != field_size:
+                    raise ValueError("each key-state transition table needs one row per category")
+                if any(not row for row in rows):
+                    raise ValueError("key-state transition rows must not be empty")
+                if any(value < 0 or value >= field_size for row in rows for value in row):
+                    raise ValueError("key-state transition table contains an out-of-range category")
 
     @property
     @override
@@ -113,6 +139,14 @@ class Pi0Config(_model.BaseModelConfig):
                 key_state_target_mask=(
                     jax.ShapeDtypeStruct([batch_size, len(self.key_state_num_values)], jnp.bool_)
                     if self.key_state_token_mode != "disabled"
+                    else None
+                ),
+                action_loss_mask=(
+                    jax.ShapeDtypeStruct(
+                        [batch_size, self.action_horizon, self.action_dim],
+                        jnp.bool_,
+                    )
+                    if self.use_action_loss_mask
                     else None
                 ),
             )

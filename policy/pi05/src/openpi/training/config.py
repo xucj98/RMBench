@@ -18,6 +18,7 @@ import openpi.models.pi0_config as pi0_config
 import openpi.models.pi0_fast as pi0_fast
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
+import openpi.policies.arx_policy as arx_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
 import openpi.shared.download as _download
@@ -192,6 +193,10 @@ class DataConfigFactory(abc.ABC):
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         """Create a data config."""
 
+    def create_for_training(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        """Create a training config; factories may opt into train-only augmentation."""
+        return self.create(assets_dirs, model_config)
+
     def create_base_config(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         repo_id = self.repo_id if self.repo_id is not tyro.MISSING else None
         asset_id = self.assets.asset_id or repo_id
@@ -238,6 +243,106 @@ class SimpleDataConfig(DataConfigFactory):
             self.create_base_config(assets_dirs, model_config),
             data_transforms=self.data_transforms(model_config),
             model_transforms=self.model_transforms(model_config),
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class LeRobotX2RobotMemoryDataConfig(DataConfigFactory):
+    """X1Pro SM2SM data with delayed state sequences and shared semantic memory."""
+
+    representation: Literal["full_state", "state_token"] = "full_state"
+    state_history_size: int = 3
+    state_future_size: int = 3
+    state_step: int = 1
+    random_drop_master: float = 0.0
+    random_drop_history: float = 0.0
+    random_drop_future: float = 0.0
+    random_pos_offset: float = 0.0
+    robot_state_dim: int = 28
+    memory_dim: int = 3
+
+    @property
+    def state_sequence_length(self) -> int:
+        return self.state_history_size + 1 + self.state_future_size
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        return self._create(assets_dirs, model_config, training=False)
+
+    @override
+    def create_for_training(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        return self._create(assets_dirs, model_config, training=True)
+
+    def _create(
+        self,
+        assets_dirs: pathlib.Path,
+        model_config: _model.BaseModelConfig,
+        *,
+        training: bool,
+    ) -> DataConfig:
+        if model_config.action_dim != 32:
+            raise ValueError("X1Pro shared-memory layout currently requires model.action_dim=32")
+
+        repack_structure: dict[str, Any] = {
+            "images": {
+                "left_wrist_view": "left_wrist_view",
+                "face_view": "face_view",
+                "right_wrist_view": "right_wrist_view",
+            },
+            "state": "state",
+            "actions": "actions",
+            "prompt": "task",
+        }
+        if self.representation == "state_token":
+            repack_structure.update(
+                {
+                    "key_state_input_ids": "key_state_input_ids",
+                    "key_state_target_ids": "key_state_target_ids",
+                    "key_state_target_mask": "key_state_target_mask",
+                }
+            )
+        else:
+            repack_structure["memory_action_valid"] = "memory_action_valid"
+
+        data_transforms = _transforms.Group(
+            inputs=[
+                arx_policy.ArxSm2smInputs(
+                    representation=self.representation,
+                    state_history_size=self.state_history_size,
+                    state_future_size=self.state_future_size,
+                    robot_state_dim=self.robot_state_dim,
+                    memory_dim=self.memory_dim,
+                    random_drop_master=self.random_drop_master if training else 0.0,
+                    random_drop_history=self.random_drop_history if training else 0.0,
+                    random_drop_future=self.random_drop_future if training else 0.0,
+                    random_pos_offset=self.random_pos_offset if training else 0.0,
+                )
+            ],
+            outputs=[
+                arx_policy.ArxSm2smOutputs(
+                    representation=self.representation,
+                    robot_state_dim=self.robot_state_dim,
+                    memory_dim=self.memory_dim,
+                )
+            ],
+        )
+        model_transforms = ModelTransformFactory()(model_config)
+        model_transforms = _transforms.Group(
+            inputs=[arx_policy.AddStateInpaintingMask(model_config.action_dim), *model_transforms.inputs],
+            outputs=model_transforms.outputs,
+        )
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=_transforms.Group(inputs=[_transforms.RepackTransform(repack_structure)]),
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            action_sequence_keys=("actions", "memory_action_valid")
+            if self.representation == "full_state"
+            else ("actions",),
+            state_sequence_key="state",
+            state_history_size=self.state_history_size,
+            state_future_size=self.state_future_size,
+            state_step=self.state_step,
         )
 
 
@@ -958,6 +1063,116 @@ def _pi05_multitask_state_token_serial_soft_config() -> TrainConfig:
     )
 
 
+_DRAWER_SORTING_MEMORY_SCHEMA = [
+    {
+        "name": "drawer_target",
+        "size": 4,
+        "labels": ["observe", "item_1", "item_2", "item_3"],
+        "initial_value": "observe",
+        "label_mapping": {"1": "item_1", "2": "item_2", "3": "item_3", "4": "item_1", "5": "item_2", "6": "item_3"},
+        "allowed_transitions": {
+            "observe": ["observe", "item_1", "item_2", "item_3"],
+            "item_1": ["item_1", "observe"],
+            "item_2": ["item_2", "observe"],
+            "item_3": ["item_3", "observe"],
+        },
+        "dense_encoding": {
+            "type": "implicit_unknown_one_hot",
+            "dims": [28, 31],
+            "observe": [0.0, 0.0, 0.0],
+        },
+    }
+]
+
+
+def _drawer_sorting_policy_metadata(representation: str) -> dict[str, Any]:
+    return {
+        "batch_id": "pi05_x1pro_drawer_sorting_shared_memory",
+        "representation": representation,
+        "memory_schema": _DRAWER_SORTING_MEMORY_SCHEMA,
+        "serial_train_conditioning": "teacher_forcing" if representation == "state_token" else None,
+        "x2robot": {
+            "mode": "sm2sm",
+            "source_fps": 30,
+            "target_fps": 15,
+            "action_horizon": 30,
+            "query_stride": 15,
+            "state_history_size": 3,
+            "state_future_size": 3,
+            "state_step": 1,
+            "latency_step": 3,
+            "slave_state_dim": 14,
+            "master_state_dim": 14,
+            "availability_mask_index": 31,
+        },
+    }
+
+
+def _pi05_x1pro_drawer_sorting_full_state_config() -> TrainConfig:
+    return TrainConfig(
+        name="pi05_x1pro_drawer_sorting_full_state",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=30,
+            pi05_state_sequence_in_suffix=True,
+            use_action_loss_mask=True,
+        ),
+        data=LeRobotX2RobotMemoryDataConfig(
+            repo_id="drawer_sorting_x1pro_shared_memory_sm2sm_15hz",
+            assets=AssetsConfig(asset_id="drawer_sorting_x1pro_full_state"),
+            representation="full_state",
+            state_history_size=3,
+            state_future_size=3,
+            random_drop_master=0.10,
+            random_drop_history=0.30,
+            random_pos_offset=0.020,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params",
+            missing_regex=".*state_sequence_proj.*",
+        ),
+        batch_size=32,
+        num_train_steps=30_000,
+        checkpoint_max_to_keep=3,
+        fsdp_devices=1,
+        policy_metadata=_drawer_sorting_policy_metadata("full_state"),
+    )
+
+
+def _pi05_x1pro_drawer_sorting_serial_soft_config() -> TrainConfig:
+    return TrainConfig(
+        name="pi05_x1pro_drawer_sorting_serial_soft",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=30,
+            pi05_state_sequence_in_suffix=True,
+            key_state_token_mode="serial",
+            key_state_num_values=(4,),
+            key_state_allowed_transitions=(((0, 1, 2, 3), (0, 1), (0, 2), (0, 3)),),
+            key_state_initial_ids=(0,),
+        ),
+        data=LeRobotX2RobotMemoryDataConfig(
+            repo_id="drawer_sorting_x1pro_shared_memory_sm2sm_15hz",
+            assets=AssetsConfig(asset_id="drawer_sorting_x1pro_serial_soft"),
+            representation="state_token",
+            state_history_size=3,
+            state_future_size=3,
+            random_drop_master=0.10,
+            random_drop_history=0.30,
+            random_pos_offset=0.020,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params",
+            missing_regex=".*(?:state_sequence_proj|key_state_token).*",
+        ),
+        batch_size=32,
+        num_train_steps=30_000,
+        checkpoint_max_to_keep=3,
+        fsdp_devices=1,
+        policy_metadata=_drawer_sorting_policy_metadata("state_token_serial_soft"),
+    )
+
+
 _PUT_BACK_BLOCK_KEY_STATE_SCHEMA = [
     {
         "name": "phase",
@@ -1085,6 +1300,8 @@ _CONFIGS = [
     _pi05_rearrange_state_token_boundary_ablation_config(),
     _pi05_rearrange_state_token_no_button_ablation_config(),
     _pi05_multitask_state_token_serial_soft_config(),
+    _pi05_x1pro_drawer_sorting_full_state_config(),
+    _pi05_x1pro_drawer_sorting_serial_soft_config(),
     _pi0_robotwin_lora_baseline_config(),
     _pi0_robotwin_key_state_baseline_lora_config(),
     _pi0_robotwin_key_state_baseline_full_config(),
