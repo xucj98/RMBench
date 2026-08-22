@@ -48,5 +48,8 @@ uv run python examples/x2robot/convert_drawer_sorting_to_lerobot.py \
 
 | run | config | checkpoint | 状态 |
 | --- | --- | --- | --- |
-| `full_state_seed42` | `pi05_x1pro_drawer_sorting_full_state` | `policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_full_state/full_state_seed42/30000` | 等待数据转换与 norm stats |
-| `serial_soft_seed42` | `pi05_x1pro_drawer_sorting_serial_soft` | `policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_serial_soft/serial_soft_seed42/30000` | 等待数据转换与 norm stats |
+| `full_state_seed42` | `pi05_x1pro_drawer_sorting_full_state` | `policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_full_state/full_state_seed42/30000` | GPU1 训练中，W&B `qcikknti` |
+| `serial_soft_seed42` | `pi05_x1pro_drawer_sorting_serial_soft` | `policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_serial_soft/serial_soft_seed42/30000` | GPU2 训练中，W&B `zcqsxzjk` |
+
+正式训练于 2026-08-22 23:55（Asia/Shanghai）从提交 `4ec8248492fcf2c745dd921b9828410b4861121a`
+启动。queue state：`policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_shared_memory_queue_state.json`。
