@@ -293,6 +293,7 @@ class LeRobotX2RobotMemoryDataConfig(DataConfigFactory):
             "actions": "actions",
             "prompt": "task",
         }
+        repack_structure["memory_action_valid"] = "memory_action_valid"
         if self.representation == "state_token":
             repack_structure.update(
                 {
@@ -301,8 +302,6 @@ class LeRobotX2RobotMemoryDataConfig(DataConfigFactory):
                     "key_state_target_mask": "key_state_target_mask",
                 }
             )
-        else:
-            repack_structure["memory_action_valid"] = "memory_action_valid"
 
         data_transforms = _transforms.Group(
             inputs=[
@@ -336,9 +335,7 @@ class LeRobotX2RobotMemoryDataConfig(DataConfigFactory):
             repack_transforms=_transforms.Group(inputs=[_transforms.RepackTransform(repack_structure)]),
             data_transforms=data_transforms,
             model_transforms=model_transforms,
-            action_sequence_keys=("actions", "memory_action_valid")
-            if self.representation == "full_state"
-            else ("actions",),
+            action_sequence_keys=("actions", "memory_action_valid"),
             state_sequence_key="state",
             state_history_size=self.state_history_size,
             state_future_size=self.state_future_size,
@@ -1104,6 +1101,8 @@ def _drawer_sorting_policy_metadata(representation: str) -> dict[str, Any]:
             "slave_state_dim": 14,
             "master_state_dim": 14,
             "availability_mask_index": 31,
+            "forced_execution_memory_action_loss": "masked",
+            "forced_execution_crossing_robot_action_loss": "masked_from_unknown_boundary",
         },
     }
 
@@ -1150,6 +1149,7 @@ def _pi05_x1pro_drawer_sorting_serial_soft_config() -> TrainConfig:
             key_state_num_values=(4,),
             key_state_allowed_transitions=(((0, 1, 2, 3), (0, 1), (0, 2), (0, 3)),),
             key_state_initial_ids=(0,),
+            use_action_loss_mask=True,
         ),
         data=LeRobotX2RobotMemoryDataConfig(
             repo_id="drawer_sorting_x1pro_shared_memory_sm2sm_15hz",

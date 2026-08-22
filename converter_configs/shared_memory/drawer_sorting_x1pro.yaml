@@ -34,3 +34,4 @@ training:
   latency_step: 3
   soft_action_boundary: true
   forced_execution_memory_action_loss: masked
+  forced_execution_crossing_robot_action_loss: masked_from_unknown_boundary

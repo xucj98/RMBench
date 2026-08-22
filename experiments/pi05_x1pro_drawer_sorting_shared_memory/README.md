@@ -9,6 +9,9 @@
 4/5/6 execution override 以及 Full State memory action loss mask 详见
 `docs/x1pro_drawer_sorting_state_transition_design.md`。
 
+缺观察的强制执行边界还使用 query-time robot action mask：边界前的 chunk 不学习边界后的
+非因果抓放动作；query 已位于执行段时，因为 item 已注入输入，该段动作监督完整保留。
+
 ## 数据
 
 - 原始目录：`data/x1pro_table_clean`（本机软链，不写入代码配置的绝对 `/mnt` 路径）；
@@ -38,7 +41,8 @@ uv run python examples/x2robot/convert_drawer_sorting_to_lerobot.py \
 - seed：42；
 - base checkpoint：Pi0.5 base；
 - W&B group：`pi05_x1pro_drawer_sorting_shared_memory`；
-- 代码提交：`27290afb7c151cc2e1009ac3c2c6ae6ee5e6ee4f`。
+- 基础实现提交：`27290afb7c151cc2e1009ac3c2c6ae6ee5e6ee4f`；正式启动提交以 checkpoint
+  `metadata/command.txt` 为准。
 
 正式训练 manifest：`jobs_train.json`。计划使用 GPU1/2 各运行一个模型。
 

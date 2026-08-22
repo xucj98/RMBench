@@ -67,7 +67,7 @@ def test_x1pro_drawer_sorting_configs_share_dataset_and_timing_contract():
     assert full.data.representation == "full_state"
     assert serial.data.representation == "state_token"
     assert full.model.use_action_loss_mask
-    assert not serial.model.use_action_loss_mask
+    assert serial.model.use_action_loss_mask
     assert serial.model.key_state_token_mode == "serial"
     assert serial.model.key_state_num_values == (4,)
     assert serial.model.key_state_initial_ids == (0,)

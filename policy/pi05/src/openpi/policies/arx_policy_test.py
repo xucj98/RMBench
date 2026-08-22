@@ -50,7 +50,28 @@ def test_full_state_masks_only_memory_action_loss_for_forced_execution():
 
     mask = result["action_loss_mask"]
     assert mask.shape == (4, 32)
-    assert mask[:, :28].all()
+    expected_robot_mask = np.repeat(np.asarray([[True], [False], [False], [False]]), 28, axis=1)
+    np.testing.assert_array_equal(mask[:, :28], expected_robot_mask)
     expected_memory_mask = np.repeat(np.asarray([[True], [False], [False], [True]]), 3, axis=1)
     np.testing.assert_array_equal(mask[:, 28:31], expected_memory_mask)
     assert not mask[:, 31].any()
+
+
+def test_forced_current_execution_keeps_robot_actions_until_next_unknown_execution():
+    transform = arx_policy.ArxSm2smInputs(representation="state_token")
+    result = transform(
+        {
+            "state": np.zeros(32, dtype=np.float32),
+            "actions": np.zeros((5, 32), dtype=np.float32),
+            "memory_action_valid": np.asarray([[False], [False], [True], [True], [False]]),
+            "key_state_input_ids": np.asarray([2]),
+            "key_state_target_ids": np.asarray([2]),
+            "key_state_target_mask": np.asarray([True]),
+            "images": _images(),
+        }
+    )
+
+    mask = result["action_loss_mask"]
+    expected_robot_mask = np.repeat(np.asarray([[True], [True], [True], [True], [False]]), 28, axis=1)
+    np.testing.assert_array_equal(mask[:, :28], expected_robot_mask)
+    assert not mask[:, 28:].any()

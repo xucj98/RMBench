@@ -69,20 +69,21 @@ class ArxSm2smInputs(transforms.DataTransformFn):
             if raw_actions.shape[-1] < output_dim:
                 raise ValueError(f"ARX actions need at least {output_dim} dims, got {raw_actions.shape}")
             inputs["actions"] = np.array(raw_actions[..., :output_dim], copy=True)
+            if "memory_action_valid" not in data:
+                raise ValueError("Shared-memory ARX dataset is missing memory_action_valid")
+            memory_valid = np.asarray(data["memory_action_valid"], dtype=np.bool_)
+            if memory_valid.ndim > 0 and memory_valid.shape[-1] == 1:
+                memory_valid = memory_valid[..., 0]
+            if memory_valid.shape != raw_actions.shape[:-1]:
+                raise ValueError(
+                    f"memory_action_valid shape {memory_valid.shape} does not match actions {raw_actions.shape}"
+                )
+            action_loss_mask = np.zeros((*raw_actions.shape[:-1], self.availability_mask_index + 1), dtype=np.bool_)
+            robot_valid = self._causal_robot_action_valid(memory_valid)
+            action_loss_mask[..., : self.robot_state_dim] = robot_valid[..., None]
             if self.representation == "full_state":
-                if "memory_action_valid" not in data:
-                    raise ValueError("Full-state ARX dataset is missing memory_action_valid")
-                memory_valid = np.asarray(data["memory_action_valid"], dtype=np.bool_)
-                if memory_valid.ndim > 0 and memory_valid.shape[-1] == 1:
-                    memory_valid = memory_valid[..., 0]
-                if memory_valid.shape != raw_actions.shape[:-1]:
-                    raise ValueError(
-                        f"memory_action_valid shape {memory_valid.shape} does not match actions {raw_actions.shape}"
-                    )
-                action_loss_mask = np.zeros((*raw_actions.shape[:-1], self.availability_mask_index + 1), dtype=np.bool_)
-                action_loss_mask[..., : self.robot_state_dim] = True
                 action_loss_mask[..., self.robot_state_dim : output_dim] = memory_valid[..., None]
-                inputs["action_loss_mask"] = action_loss_mask
+            inputs["action_loss_mask"] = action_loss_mask
 
         if self.representation == "state_token":
             input_ids = np.asarray(data["key_state_input_ids"], dtype=np.int32)
@@ -110,6 +111,34 @@ class ArxSm2smInputs(transforms.DataTransformFn):
             inputs["actions"][..., 21:24] += offset
 
         return inputs
+
+    @staticmethod
+    def _causal_robot_action_valid(memory_valid: np.ndarray) -> np.ndarray:
+        """Keep actions conditioned by the memory available at chunk query time.
+
+        A false run at index zero is the current forced execution interval and
+        is valid because its item has already been injected into the input. A
+        later false run is a not-yet-known forced acquisition, so supervision
+        stops at that boundary for the rest of the open-loop chunk.
+        """
+        if memory_valid.ndim == 0:
+            return np.ones((), dtype=np.bool_)
+        if memory_valid.ndim != 1:
+            raise ValueError(f"Expected one action-horizon validity axis, got {memory_valid.shape}")
+
+        search_start = 0
+        if not memory_valid[0]:
+            available = np.flatnonzero(memory_valid)
+            if not len(available):
+                return np.ones_like(memory_valid)
+            search_start = int(available[0])
+        future_forced = np.flatnonzero(~memory_valid[search_start:])
+        if not len(future_forced):
+            return np.ones_like(memory_valid)
+        cutoff = search_start + int(future_forced[0])
+        result = np.ones_like(memory_valid)
+        result[cutoff:] = False
+        return result
 
     def _prepare_state(self, raw_state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if raw_state.ndim not in {1, 2}:

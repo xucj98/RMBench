@@ -103,8 +103,15 @@ label 6: m_minus[k] = m_plus[k] = item_3
 此外构造逐帧 `memory_action_valid[k]`。如果某个 4/5/6 起点之前的有效 memory 并非对应
 item，说明该 item 是仅凭 execution override 强制注入的；该执行区间内
 `memory_action_valid=false`。这解决 Full State action chunk 从区间外跨入区间时的隐含
-错误监督：机器人动作仍完整参与 loss，但这段 3D memory action 不参与 loss。直到执行结束
-返回 `observe` 时重新设为 true，因此 `item_i -> observe` 完成转移仍正常学习。
+错误监督：这段 3D memory action 不参与 loss。直到执行结束返回 `observe` 时重新设为 true，
+因此 `item_i -> observe` 完成转移仍正常学习。robot action 是否保留再由下面的 query-time
+因果规则决定。
+
+robot action 还要满足 query-time 因果性。若 chunk 起点尚未进入强制执行段，则从 chunk 中
+首次遇到 `memory_action_valid=false` 起，余下 robot action loss 一并屏蔽，避免模型在
+`observe` 条件下学习一个尚未获知 item 的抓放动作。若 chunk 起点已经位于强制执行段，说明
+当前输入已经 override 为对应 item：当前连续的强制执行段 robot action 全部保留；执行结束后的
+soft 跨界动作也保留，但若 horizon 内又遇到下一个强制执行段，则从新边界起屏蔽。
 
 ## 5. 每个 timestamp 的 SM2SM robot 监督
 
@@ -155,9 +162,10 @@ memory_action_valid[k] = 该 memory action 是否来自真实状态转移
 memory 输出使用当前 observation `k` 的 `m_plus[k]`，不是 `k+1`，因为它表达“看完当前
 画面后应更新成什么状态”；robot action 仍是下一 frame 的动作目标。
 
-loader 会与 30-step `actions` 同步读取 30-step `memory_action_valid`。Full State loss mask
-始终保留 28D robot action；仅在 `memory_action_valid=false` 的 timestep 屏蔽 28:31 三个
-memory 维度。第 31 个 padding/inpainting mask 维度从不参与 action loss。
+loader 会与 30-step `actions` 同步读取 30-step `memory_action_valid`。Full State 在
+`memory_action_valid=false` 的 timestep 屏蔽 28:31 三个 memory 维度；Full 与 Serial 都按
+上述 query-time 因果规则构造 28D robot action mask。第 31 个 padding/inpainting mask 维度
+从不参与 action loss。
 
 ## 7. Serial Soft sample
 
