@@ -38,8 +38,12 @@ uv run python examples/x2robot/convert_drawer_sorting_to_lerobot.py \
 
 | run | config | checkpoint | 状态 |
 | --- | --- | --- | --- |
-| `s2m_full_state_v2_seed42` | `pi05_x1pro_drawer_sorting_s2m_full_state` | `policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_s2m_full_state/s2m_full_state_v2_seed42/30000` | 等待数据转换/训练 |
-| `s2m_serial_soft_v2_seed42` | `pi05_x1pro_drawer_sorting_s2m_serial_soft` | `policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_s2m_serial_soft/s2m_serial_soft_v2_seed42/30000` | 等待数据转换/训练 |
+| `s2m_full_state_v2_seed42` | `pi05_x1pro_drawer_sorting_s2m_full_state` | `policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_s2m_full_state/s2m_full_state_v2_seed42/30000` | GPU0 训练中，W&B `btj43jmx` |
+| `s2m_serial_soft_v2_seed42` | `pi05_x1pro_drawer_sorting_s2m_serial_soft` | `policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_s2m_serial_soft/s2m_serial_soft_v2_seed42/30000` | GPU1 训练中，W&B `mnfdq8ma` |
+
+v2 正式训练于 2026-08-27 15:33（Asia/Shanghai）从提交
+`3f7086271dbe49100323496218caf0ed69b761b3` 启动。queue state：
+`policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_shared_memory_s2m_v2_queue_state.json`。
 
 ## v1：单字段 SM2SM（已被 v2 取代，保留复现）
 
