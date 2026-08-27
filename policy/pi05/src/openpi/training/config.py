@@ -248,7 +248,7 @@ class SimpleDataConfig(DataConfigFactory):
 
 @dataclasses.dataclass(frozen=True)
 class LeRobotX2RobotMemoryDataConfig(DataConfigFactory):
-    """X1Pro SM2SM data with delayed state sequences and shared semantic memory."""
+    """X1Pro S2M/SM2SM data with optional state sequences and shared memory."""
 
     representation: Literal["full_state", "state_token"] = "full_state"
     state_history_size: int = 3
@@ -260,6 +260,7 @@ class LeRobotX2RobotMemoryDataConfig(DataConfigFactory):
     random_pos_offset: float = 0.0
     robot_state_dim: int = 28
     memory_dim: int = 3
+    memory_field_dims: tuple[int, ...] = (3,)
 
     @property
     def state_sequence_length(self) -> int:
@@ -311,6 +312,8 @@ class LeRobotX2RobotMemoryDataConfig(DataConfigFactory):
                     state_future_size=self.state_future_size,
                     robot_state_dim=self.robot_state_dim,
                     memory_dim=self.memory_dim,
+                    memory_field_dims=self.memory_field_dims,
+                    model_action_dim=model_config.action_dim,
                     random_drop_master=self.random_drop_master if training else 0.0,
                     random_drop_history=self.random_drop_history if training else 0.0,
                     random_drop_future=self.random_drop_future if training else 0.0,
@@ -326,17 +329,18 @@ class LeRobotX2RobotMemoryDataConfig(DataConfigFactory):
             ],
         )
         model_transforms = ModelTransformFactory()(model_config)
-        model_transforms = _transforms.Group(
-            inputs=[arx_policy.AddStateInpaintingMask(model_config.action_dim), *model_transforms.inputs],
-            outputs=model_transforms.outputs,
-        )
+        if self.state_sequence_length > 1:
+            model_transforms = _transforms.Group(
+                inputs=[arx_policy.AddStateInpaintingMask(model_config.action_dim), *model_transforms.inputs],
+                outputs=model_transforms.outputs,
+            )
         return dataclasses.replace(
             self.create_base_config(assets_dirs, model_config),
             repack_transforms=_transforms.Group(inputs=[_transforms.RepackTransform(repack_structure)]),
             data_transforms=data_transforms,
             model_transforms=model_transforms,
             action_sequence_keys=("actions", "memory_action_valid"),
-            state_sequence_key="state",
+            state_sequence_key="state" if self.state_sequence_length > 1 else None,
             state_history_size=self.state_history_size,
             state_future_size=self.state_future_size,
             state_step=self.state_step,
@@ -1081,6 +1085,45 @@ _DRAWER_SORTING_MEMORY_SCHEMA = [
     }
 ]
 
+_DRAWER_SORTING_MEMORY_SCHEMA_V2 = [
+    {
+        "name": "completed_layers",
+        "size": 4,
+        "labels": ["completed_0", "completed_1", "completed_2", "completed_3"],
+        "initial_value": "completed_0",
+        "update_rule": {"type": "chronological_execution_end_count", "max_value": 3},
+        "allowed_transitions": {
+            "completed_0": ["completed_0", "completed_1"],
+            "completed_1": ["completed_1", "completed_2"],
+            "completed_2": ["completed_2", "completed_3"],
+            "completed_3": ["completed_3"],
+        },
+        "dense_encoding": {
+            "type": "implicit_zero_one_hot",
+            "dims": [14, 17],
+            "completed_0": [0.0, 0.0, 0.0],
+        },
+    },
+    {
+        "name": "drawer_target",
+        "size": 4,
+        "labels": ["observe", "item_1", "item_2", "item_3"],
+        "initial_value": "observe",
+        "label_mapping": {"1": "item_1", "2": "item_2", "3": "item_3", "4": "item_1", "5": "item_2", "6": "item_3"},
+        "allowed_transitions": {
+            "observe": ["observe", "item_1", "item_2", "item_3"],
+            "item_1": ["item_1", "observe"],
+            "item_2": ["item_2", "observe"],
+            "item_3": ["item_3", "observe"],
+        },
+        "dense_encoding": {
+            "type": "implicit_zero_one_hot",
+            "dims": [17, 20],
+            "observe": [0.0, 0.0, 0.0],
+        },
+    },
+]
+
 
 def _drawer_sorting_policy_metadata(representation: str) -> dict[str, Any]:
     return {
@@ -1102,6 +1145,32 @@ def _drawer_sorting_policy_metadata(representation: str) -> dict[str, Any]:
             "master_state_dim": 14,
             "availability_mask_index": 31,
             "forced_execution_memory_action_loss": "masked",
+            "forced_execution_crossing_robot_action_loss": "masked_from_unknown_boundary",
+        },
+    }
+
+
+def _drawer_sorting_s2m_policy_metadata(representation: str) -> dict[str, Any]:
+    return {
+        "batch_id": "pi05_x1pro_drawer_sorting_shared_memory",
+        "design_version": 2,
+        "representation": representation,
+        "memory_schema": _DRAWER_SORTING_MEMORY_SCHEMA_V2,
+        "serial_train_conditioning": "teacher_forcing" if representation == "state_token" else None,
+        "terminal_state": {"completed_layers": "completed_3", "drawer_target": "observe"},
+        "x2robot": {
+            "mode": "s2m",
+            "source_fps": 30,
+            "target_fps": 15,
+            "action_horizon": 30,
+            "query_stride": 15,
+            "state_history_size": 0,
+            "state_future_size": 0,
+            "state_step": 1,
+            "latency_step": 0,
+            "slave_state_dim": 14,
+            "master_action_dim": 14,
+            "forced_execution_memory_action_loss": "masked_per_field",
             "forced_execution_crossing_robot_action_loss": "masked_from_unknown_boundary",
         },
     }
@@ -1170,6 +1239,73 @@ def _pi05_x1pro_drawer_sorting_serial_soft_config() -> TrainConfig:
         checkpoint_max_to_keep=3,
         fsdp_devices=1,
         policy_metadata=_drawer_sorting_policy_metadata("state_token_serial_soft"),
+    )
+
+
+def _pi05_x1pro_drawer_sorting_s2m_full_state_config() -> TrainConfig:
+    return TrainConfig(
+        name="pi05_x1pro_drawer_sorting_s2m_full_state",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=30,
+            use_action_loss_mask=True,
+        ),
+        data=LeRobotX2RobotMemoryDataConfig(
+            repo_id="drawer_sorting_x1pro_shared_memory_s2m_15hz_v2",
+            assets=AssetsConfig(asset_id="drawer_sorting_x1pro_s2m_full_state_v2"),
+            representation="full_state",
+            state_history_size=0,
+            state_future_size=0,
+            robot_state_dim=14,
+            memory_dim=6,
+            memory_field_dims=(3, 3),
+            random_pos_offset=0.020,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params",
+        ),
+        batch_size=32,
+        num_train_steps=30_000,
+        checkpoint_max_to_keep=3,
+        fsdp_devices=1,
+        policy_metadata=_drawer_sorting_s2m_policy_metadata("full_state"),
+    )
+
+
+def _pi05_x1pro_drawer_sorting_s2m_serial_soft_config() -> TrainConfig:
+    completed_transitions = ((0, 1), (1, 2), (2, 3), (3,))
+    drawer_target_transitions = ((0, 1, 2, 3), (0, 1), (0, 2), (0, 3))
+    return TrainConfig(
+        name="pi05_x1pro_drawer_sorting_s2m_serial_soft",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=30,
+            key_state_token_mode="serial",
+            key_state_num_values=(4, 4),
+            key_state_allowed_transitions=(completed_transitions, drawer_target_transitions),
+            key_state_initial_ids=(0, 0),
+            use_action_loss_mask=True,
+        ),
+        data=LeRobotX2RobotMemoryDataConfig(
+            repo_id="drawer_sorting_x1pro_shared_memory_s2m_15hz_v2",
+            assets=AssetsConfig(asset_id="drawer_sorting_x1pro_s2m_serial_soft_v2"),
+            representation="state_token",
+            state_history_size=0,
+            state_future_size=0,
+            robot_state_dim=14,
+            memory_dim=6,
+            memory_field_dims=(3, 3),
+            random_pos_offset=0.020,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params",
+            missing_regex=".*key_state_token.*",
+        ),
+        batch_size=32,
+        num_train_steps=30_000,
+        checkpoint_max_to_keep=3,
+        fsdp_devices=1,
+        policy_metadata=_drawer_sorting_s2m_policy_metadata("state_token_serial_soft"),
     )
 
 
@@ -1302,6 +1438,8 @@ _CONFIGS = [
     _pi05_multitask_state_token_serial_soft_config(),
     _pi05_x1pro_drawer_sorting_full_state_config(),
     _pi05_x1pro_drawer_sorting_serial_soft_config(),
+    _pi05_x1pro_drawer_sorting_s2m_full_state_config(),
+    _pi05_x1pro_drawer_sorting_s2m_serial_soft_config(),
     _pi0_robotwin_lora_baseline_config(),
     _pi0_robotwin_key_state_baseline_lora_config(),
     _pi0_robotwin_key_state_baseline_full_config(),

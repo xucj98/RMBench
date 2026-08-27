@@ -1,5 +1,20 @@
-version: 1
+version: 2
 fields:
+  - name: completed_layers
+    kind: monotonic_progress
+    initial_value: completed_0
+    labels: [completed_0, completed_1, completed_2, completed_3]
+    update:
+      event: execution_end
+      ordering: chronological_execution_rank
+    transitions:
+      completed_0: [completed_0, completed_1]
+      completed_1: [completed_1, completed_2]
+      completed_2: [completed_2, completed_3]
+      completed_3: [completed_3]
+    terminal_when:
+      completed_layers: completed_3
+      drawer_target: observe
   - name: drawer_target
     kind: cyclic_attribute
     initial_value: observe

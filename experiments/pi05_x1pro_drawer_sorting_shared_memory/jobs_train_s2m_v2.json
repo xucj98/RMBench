@@ -1,0 +1,58 @@
+{
+  "jobs": [
+    {
+      "name": "s2m_full_state_v2_seed42",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_x1pro_drawer_sorting_s2m_full_state",
+        "--exp-name=s2m_full_state_v2_seed42",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=42"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_x1pro_drawer_sorting_shared_memory",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_s2m_full_state/_formal_logs/s2m_full_state_v2_seed42/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_s2m_full_state/_formal_logs/s2m_full_state_v2_seed42/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    },
+    {
+      "name": "s2m_serial_soft_v2_seed42",
+      "cwd": "policy/pi05",
+      "cmd": [
+        ".venv/bin/python",
+        "scripts/train.py",
+        "pi05_x1pro_drawer_sorting_s2m_serial_soft",
+        "--exp-name=s2m_serial_soft_v2_seed42",
+        "--num-train-steps=30000",
+        "--batch-size=32",
+        "--seed=42"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": "0.95",
+        "WANDB_RUN_GROUP": "pi05_x1pro_drawer_sorting_shared_memory",
+        "WANDB_JOB_TYPE": "train"
+      },
+      "log_path": "policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_s2m_serial_soft/_formal_logs/s2m_serial_soft_v2_seed42/train.stdout.log",
+      "pid_path": "policy/pi05/checkpoints/pi05_x1pro_drawer_sorting_s2m_serial_soft/_formal_logs/s2m_serial_soft_v2_seed42/train.pid",
+      "gpu_requirements": {
+        "placement": "exclusive",
+        "min_free_memory_mib": 70000,
+        "max_existing_util": 10,
+        "stable_polls": 2
+      }
+    }
+  ]
+}

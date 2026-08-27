@@ -12,12 +12,12 @@ from openpi import transforms
 
 @dataclasses.dataclass(frozen=True)
 class ArxSm2smInputs(transforms.DataTransformFn):
-    """Prepare X1Pro SM2SM trajectories and delayed state sequences.
+    """Prepare X1Pro S2M/SM2SM trajectories with optional shared memory.
 
-    Raw rows use the stable deployment layout ``slave[14] + master[14] +
-    optional memory + availability_mask``.  Future slave and semantic-memory
-    values are hidden because they are not available online; future master
-    values remain as the action-inpainting condition.
+    The legacy sequence mode uses ``slave[14] + master[14] + memory``.  The
+    real-data v2 scalar mode uses ``slave[14] + memory`` as state and
+    ``master[14] + memory`` as action.  ``memory_field_dims`` maps per-field
+    validity sidecars to their dense full-state slices.
     """
 
     representation: str = "full_state"
@@ -26,6 +26,8 @@ class ArxSm2smInputs(transforms.DataTransformFn):
     slave_state_dim: int = 14
     robot_state_dim: int = 28
     memory_dim: int = 3
+    memory_field_dims: tuple[int, ...] = (3,)
+    model_action_dim: int = 32
     availability_mask_index: int = 31
     random_drop_master: float = 0.0
     random_drop_history: float = 0.0
@@ -41,8 +43,10 @@ class ArxSm2smInputs(transforms.DataTransformFn):
     def __post_init__(self) -> None:
         if self.representation not in {"full_state", "state_token"}:
             raise ValueError(f"Unsupported ARX memory representation: {self.representation!r}")
-        if self.robot_state_dim != self.slave_state_dim * 2:
-            raise ValueError("SM2SM robot_state_dim must contain equally-sized slave and master blocks")
+        if self.robot_state_dim not in {self.slave_state_dim, self.slave_state_dim * 2}:
+            raise ValueError("robot_state_dim must describe either S2M slave state or SM2SM slave+master state")
+        if sum(self.memory_field_dims) != self.memory_dim:
+            raise ValueError("memory_field_dims must sum to memory_dim")
 
     def __call__(self, data: dict) -> dict:
         raw_state = np.asarray(data["state"], dtype=np.float32)
@@ -60,8 +64,9 @@ class ArxSm2smInputs(transforms.DataTransformFn):
                 "right_wrist_0_rgb": np.True_,
             },
             "state": state,
-            "state_inpainting_mask": availability,
         }
+        if availability is not None:
+            inputs["state_inpainting_mask"] = availability
 
         if "actions" in data:
             raw_actions = np.asarray(data["actions"], dtype=np.float32)
@@ -72,17 +77,21 @@ class ArxSm2smInputs(transforms.DataTransformFn):
             if "memory_action_valid" not in data:
                 raise ValueError("Shared-memory ARX dataset is missing memory_action_valid")
             memory_valid = np.asarray(data["memory_action_valid"], dtype=np.bool_)
-            if memory_valid.ndim > 0 and memory_valid.shape[-1] == 1:
-                memory_valid = memory_valid[..., 0]
-            if memory_valid.shape != raw_actions.shape[:-1]:
+            expected_valid_shape = (*raw_actions.shape[:-1], len(self.memory_field_dims))
+            if memory_valid.shape == raw_actions.shape[:-1] and len(self.memory_field_dims) == 1:
+                memory_valid = memory_valid[..., None]
+            if memory_valid.shape != expected_valid_shape:
                 raise ValueError(
-                    f"memory_action_valid shape {memory_valid.shape} does not match actions {raw_actions.shape}"
+                    f"memory_action_valid shape {memory_valid.shape} does not match expected {expected_valid_shape}"
                 )
-            action_loss_mask = np.zeros((*raw_actions.shape[:-1], self.availability_mask_index + 1), dtype=np.bool_)
-            robot_valid = self._causal_robot_action_valid(memory_valid)
+            action_loss_mask = np.zeros((*raw_actions.shape[:-1], self.model_action_dim), dtype=np.bool_)
+            robot_valid = self._causal_robot_action_valid(np.all(memory_valid, axis=-1))
             action_loss_mask[..., : self.robot_state_dim] = robot_valid[..., None]
             if self.representation == "full_state":
-                action_loss_mask[..., self.robot_state_dim : output_dim] = memory_valid[..., None]
+                cursor = self.robot_state_dim
+                for field_index, field_dim in enumerate(self.memory_field_dims):
+                    action_loss_mask[..., cursor : cursor + field_dim] = memory_valid[..., field_index, None]
+                    cursor += field_dim
             inputs["action_loss_mask"] = action_loss_mask
 
         if self.representation == "state_token":
@@ -106,9 +115,10 @@ class ArxSm2smInputs(transforms.DataTransformFn):
         if self.random_pos_offset > 0.0 and "actions" in inputs:
             offset = (np.random.rand(3).astype(np.float32) * 2.0 - 1.0) * self.random_pos_offset
             inputs["state"][..., 7:10] += offset
-            inputs["state"][..., 21:24] += offset
             inputs["actions"][..., 7:10] += offset
-            inputs["actions"][..., 21:24] += offset
+            if self.robot_state_dim == self.slave_state_dim * 2:
+                inputs["state"][..., 21:24] += offset
+                inputs["actions"][..., 21:24] += offset
 
         return inputs
 
@@ -140,7 +150,7 @@ class ArxSm2smInputs(transforms.DataTransformFn):
         result[cutoff:] = False
         return result
 
-    def _prepare_state(self, raw_state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _prepare_state(self, raw_state: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
         if raw_state.ndim not in {1, 2}:
             raise ValueError(f"ARX state must be a vector or sequence, got {raw_state.shape}")
         required_dim = self.robot_state_dim + (self.memory_dim if self.representation == "full_state" else 0)
@@ -149,11 +159,15 @@ class ArxSm2smInputs(transforms.DataTransformFn):
 
         output = np.array(raw_state[..., :required_dim], copy=True)
         if raw_state.ndim == 1:
-            availability = np.asarray(
-                raw_state[self.availability_mask_index] if raw_state.shape[-1] > self.availability_mask_index else 0.0,
-                dtype=np.float32,
-            )
-            return output, availability
+            if self.state_history_size + self.state_future_size > 0:
+                availability = np.asarray(
+                    raw_state[self.availability_mask_index]
+                    if raw_state.shape[-1] > self.availability_mask_index
+                    else 0.0,
+                    dtype=np.float32,
+                )
+                return output, availability
+            return output, None
 
         expected_length = self.state_history_size + 1 + self.state_future_size
         if raw_state.shape[0] != expected_length:
@@ -173,7 +187,7 @@ class ArxSm2smInputs(transforms.DataTransformFn):
             if self.representation == "full_state":
                 output[future, self.robot_state_dim : required_dim] = current_state[self.robot_state_dim : required_dim]
 
-        if random.random() < self.random_drop_master:
+        if self.robot_state_dim == self.slave_state_dim * 2 and random.random() < self.random_drop_master:
             output[:, self.slave_state_dim : self.robot_state_dim] = current_slave
             availability[:] = 1.0
         if self.state_history_size > 0 and random.random() < self.random_drop_history:
@@ -216,7 +230,7 @@ class AddStateInpaintingMask(transforms.DataTransformFn):
 
 @dataclasses.dataclass(frozen=True)
 class ArxSm2smOutputs(transforms.DataTransformFn):
-    """Return the deployable SM2SM block and optional dense memory prediction."""
+    """Return the deployable robot-action block and optional dense memory prediction."""
 
     representation: str = "full_state"
     robot_state_dim: int = 28

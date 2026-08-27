@@ -44,6 +44,13 @@ STATE_KEYS = (
     "master_right_rotation",
     "master_right_gripper",
 )
+MEMORY_FIELD_NAMES = ("completed_layers", "drawer_target")
+COMPLETED_LAYERS_INDEX = 0
+DRAWER_TARGET_INDEX = 1
+SLAVE_STATE_DIM = 14
+MASTER_ACTION_DIM = 14
+MEMORY_FIELD_DIMS = (3, 3)
+MEMORY_DIM = sum(MEMORY_FIELD_DIMS)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -97,10 +104,13 @@ def load_config(config_path: Path) -> dict[str, Any]:
     schema_path = (config_path.parent / str(schema_ref)).resolve()
     schema = _load_yaml(schema_path)
     fields = schema.get("fields", [])
-    if len(fields) != 1 or fields[0].get("name") != "drawer_target":
-        raise ValueError("Drawer sorting requires exactly one drawer_target memory field")
+    field_names = tuple(field.get("name") for field in fields)
+    if field_names != MEMORY_FIELD_NAMES:
+        raise ValueError(f"Drawer sorting requires memory fields {MEMORY_FIELD_NAMES}, got {field_names}")
     resolved = copy.deepcopy(config)
-    resolved["memory"] = copy.deepcopy(fields[0])
+    resolved["memory_fields"] = copy.deepcopy(fields)
+    resolved["completed_layers_memory"] = copy.deepcopy(fields[COMPLETED_LAYERS_INDEX])
+    resolved["drawer_target_memory"] = copy.deepcopy(fields[DRAWER_TARGET_INDEX])
     resolved.setdefault("_runtime", {}).update(
         {"config_path": str(config_path.resolve()), "memory_schema_path": str(schema_path)}
     )
@@ -177,6 +187,9 @@ def _load_intervals(
         raise ValueError(
             f"Expected execution data for items {sorted(expected_execution_items)}, got {sorted(execution_items)}"
         )
+    execution_intervals = [interval for interval in intervals if interval.kind == "execute"]
+    if len(execution_intervals) != len(expected_execution_items):
+        raise ValueError(f"Expected exactly one execution interval per item, got {len(execution_intervals)} intervals")
     missing_observations = tuple(sorted(execution_items - observed_items))
     return tuple(intervals), missing_observations
 
@@ -185,7 +198,7 @@ def discover_episodes(config: dict[str, Any]) -> tuple[list[EpisodeRecord], list
     dataset_config = config["dataset"]
     dataset_root = _resolve_repo_path(dataset_config["source_dir"])
     required_tag = str(dataset_config["required_tag"])
-    annotation_relative_path = Path(config["memory"]["annotation"]["relative_path"])
+    annotation_relative_path = Path(config["drawer_target_memory"]["annotation"]["relative_path"])
     expected_source_fps = float(dataset_config["source_fps"])
     records = []
     skipped = []
@@ -216,7 +229,9 @@ def discover_episodes(config: dict[str, Any]) -> tuple[list[EpisodeRecord], list
             total_frames, source_fps = _episode_metadata(trajectory_path)
             if not np.isclose(source_fps, expected_source_fps):
                 raise ValueError(f"expected {expected_source_fps} Hz, got {source_fps} Hz")
-            intervals, missing_observations = _load_intervals(annotation_path, total_frames, config["memory"])
+            intervals, missing_observations = _load_intervals(
+                annotation_path, total_frames, config["drawer_target_memory"]
+            )
         except Exception as exc:
             skipped.append({"episode": episode_path.name, "reason": str(exc)})
             continue
@@ -257,6 +272,27 @@ def semantic_memory_timeline(total_frames: int, intervals: tuple[Interval, ...])
             current = interval.item_id
         result[frame_index] = current
     return result
+
+
+def completed_layers_timeline(total_frames: int, intervals: tuple[Interval, ...]) -> np.ndarray:
+    """Count chronologically completed execution intervals.
+
+    Item ids describe contents, not physical layer order. The first/second/third
+    execution in time therefore corresponds to completed layer count 0->1,
+    1->2, and 2->3 regardless of the 4/5/6 label permutation.
+    """
+    result = np.zeros(total_frames, dtype=np.int64)
+    executions = sorted((interval for interval in intervals if interval.kind == "execute"), key=lambda x: x.start)
+    for completed_count, interval in enumerate(executions, start=1):
+        result[interval.end :] = completed_count
+    return result
+
+
+def shared_memory_timeline(total_frames: int, intervals: tuple[Interval, ...]) -> np.ndarray:
+    return np.stack(
+        [completed_layers_timeline(total_frames, intervals), semantic_memory_timeline(total_frames, intervals)],
+        axis=1,
+    )
 
 
 def memory_action_valid_timeline(total_frames: int, intervals: tuple[Interval, ...]) -> np.ndarray:
@@ -308,24 +344,28 @@ def memory_supervision_for_target_frames(
     source_indices = source_indices_for_target_frames(
         target_frame_count, record.total_frames, record.source_fps, target_fps
     )
-    source_semantic = semantic_memory_timeline(record.total_frames, record.intervals)
-    source_memory_action_valid = memory_action_valid_timeline(record.total_frames, record.intervals)
-    target_ids = source_semantic[source_indices]
-    memory_action_valid = source_memory_action_valid[source_indices]
+    source_memory = shared_memory_timeline(record.total_frames, record.intervals)
+    source_drawer_target_valid = memory_action_valid_timeline(record.total_frames, record.intervals)
+    target_ids = source_memory[source_indices]
+    memory_action_valid = np.ones((target_frame_count, len(MEMORY_FIELD_NAMES)), dtype=np.bool_)
+    memory_action_valid[:, DRAWER_TARGET_INDEX] = source_drawer_target_valid[source_indices]
     previous_indices = np.maximum(np.arange(target_frame_count) - query_stride, 0)
     input_ids = target_ids[previous_indices].copy()
 
     # Critical real-data rule: 4/5/6 are actions under known item memory even
     # when their corresponding 1/2/3 observation interval is absent.
-    for interval in record.intervals:
-        if interval.kind != "execute":
-            continue
+    executions = sorted(
+        (interval for interval in record.intervals if interval.kind == "execute"), key=lambda x: x.start
+    )
+    for execution_rank, interval in enumerate(executions):
         target_mask = (source_indices >= interval.start) & (source_indices < interval.end)
-        input_ids[target_mask] = interval.item_id
-        target_ids[target_mask] = interval.item_id
+        input_ids[target_mask, COMPLETED_LAYERS_INDEX] = execution_rank
+        target_ids[target_mask, COMPLETED_LAYERS_INDEX] = execution_rank
+        input_ids[target_mask, DRAWER_TARGET_INDEX] = interval.item_id
+        target_ids[target_mask, DRAWER_TARGET_INDEX] = interval.item_id
 
-    target_valid = np.ones((target_frame_count, 1), dtype=np.bool_)
-    return input_ids[:, None], target_ids[:, None], target_valid, memory_action_valid[:, None]
+    target_valid = np.ones((target_frame_count, len(MEMORY_FIELD_NAMES)), dtype=np.bool_)
+    return input_ids, target_ids, target_valid, memory_action_valid
 
 
 def implicit_unknown_one_hot(ids: np.ndarray) -> np.ndarray:
@@ -336,6 +376,13 @@ def implicit_unknown_one_hot(ids: np.ndarray) -> np.ndarray:
     nonzero = ids > 0
     output[np.nonzero(nonzero)[0], ids[nonzero] - 1] = 1.0
     return output
+
+
+def encode_shared_memory(ids: np.ndarray) -> np.ndarray:
+    ids = np.asarray(ids, dtype=np.int64)
+    if ids.ndim != 2 or ids.shape[1] != len(MEMORY_FIELD_NAMES):
+        raise ValueError(f"Expected shared memory [frames, {len(MEMORY_FIELD_NAMES)}], got {ids.shape}")
+    return np.concatenate([implicit_unknown_one_hot(ids[:, index]) for index in range(ids.shape[1])], axis=1)
 
 
 def _load_robot_trajectory(record: EpisodeRecord) -> np.ndarray:
@@ -350,8 +397,10 @@ def _load_robot_trajectory(record: EpisodeRecord) -> np.ndarray:
         value = np.asarray(trajectories[key], dtype=np.float32)
         arrays.append(value.reshape(-1, 1) if "gripper" in key else value)
     robot = np.concatenate(arrays, axis=1)
-    if robot.shape != (record.total_frames, 28):
-        raise ValueError(f"Expected [{record.total_frames}, 28] SM2SM trajectory, got {robot.shape}")
+    if robot.shape != (record.total_frames, SLAVE_STATE_DIM + MASTER_ACTION_DIM):
+        raise ValueError(
+            f"Expected [{record.total_frames}, {SLAVE_STATE_DIM + MASTER_ACTION_DIM}] raw trajectory, got {robot.shape}"
+        )
     return robot
 
 
@@ -369,11 +418,14 @@ def load_training_arrays(
     input_ids, target_ids, target_valid, memory_action_valid = memory_supervision_for_target_frames(
         record, target_frame_count, target_fps, query_stride
     )
-    dense_input = implicit_unknown_one_hot(input_ids)
-    dense_target = implicit_unknown_one_hot(target_ids)
-    availability = np.zeros((target_frame_count, 1), dtype=np.float32)
-    state = np.concatenate([robot, dense_input, availability], axis=1)
-    action = np.concatenate([robot, dense_target, availability], axis=1)
+    dense_input = encode_shared_memory(input_ids)
+    dense_target = encode_shared_memory(target_ids)
+    state = np.zeros((target_frame_count, 32), dtype=np.float32)
+    action = np.zeros((target_frame_count, 32), dtype=np.float32)
+    state[:, :SLAVE_STATE_DIM] = robot[:, :SLAVE_STATE_DIM]
+    state[:, SLAVE_STATE_DIM : SLAVE_STATE_DIM + MEMORY_DIM] = dense_input
+    action[:, :MASTER_ACTION_DIM] = robot[:, SLAVE_STATE_DIM : SLAVE_STATE_DIM + MASTER_ACTION_DIM]
+    action[:, MASTER_ACTION_DIM : MASTER_ACTION_DIM + MEMORY_DIM] = dense_target
     return state, action, input_ids, target_ids, target_valid, memory_action_valid
 
 
@@ -530,7 +582,7 @@ class NoVideoIOLeRobotDataset(LeRobotDataset):
 def _create_dataset(config: dict[str, Any], output_path: Path) -> NoVideoIOLeRobotDataset:
     target_size = (320, 240)
     shape = (target_size[1], target_size[0], 3)
-    field_names = [field["name"] for field in [config["memory"]]]
+    field_names = [field["name"] for field in config["memory_fields"]]
     features = {
         **{
             camera: {"dtype": "video", "shape": shape, "names": ["height", "width", "channel"]}
@@ -538,10 +590,10 @@ def _create_dataset(config: dict[str, Any], output_path: Path) -> NoVideoIOLeRob
         },
         "state": {"dtype": "float32", "shape": (32,), "names": ["state"]},
         "actions": {"dtype": "float32", "shape": (32,), "names": ["actions"]},
-        "key_state_input_ids": {"dtype": "int64", "shape": (1,), "names": field_names},
-        "key_state_target_ids": {"dtype": "int64", "shape": (1,), "names": field_names},
-        "key_state_target_mask": {"dtype": "bool", "shape": (1,), "names": field_names},
-        "memory_action_valid": {"dtype": "bool", "shape": (1,), "names": ["drawer_target"]},
+        "key_state_input_ids": {"dtype": "int64", "shape": (2,), "names": field_names},
+        "key_state_target_ids": {"dtype": "int64", "shape": (2,), "names": field_names},
+        "key_state_target_mask": {"dtype": "bool", "shape": (2,), "names": field_names},
+        "memory_action_valid": {"dtype": "bool", "shape": (2,), "names": field_names},
     }
     dataset = NoVideoIOLeRobotDataset.create(
         repo_id=config["dataset"]["repo_id"],
@@ -566,15 +618,33 @@ def _write_metadata(
     memory_dir = output_path / "meta" / "key_state"
     memory_dir.mkdir(parents=True, exist_ok=True)
     phase_layout = {
-        "schema_version": 1,
+        "schema_version": 2,
         "encoding": "shared_memory",
-        "field": config["memory"],
-        "dense_layout": {"robot_dim": 28, "memory_dim": [28, 31], "availability_mask_dim": 31},
+        "fields": config["memory_fields"],
+        "dense_layout": {
+            "mode": "s2m",
+            "robot_state_dim": [0, SLAVE_STATE_DIM],
+            "robot_action_dim": [0, MASTER_ACTION_DIM],
+            "memory_fields": {
+                "completed_layers": [SLAVE_STATE_DIM, SLAVE_STATE_DIM + MEMORY_FIELD_DIMS[0]],
+                "drawer_target": [
+                    SLAVE_STATE_DIM + MEMORY_FIELD_DIMS[0],
+                    SLAVE_STATE_DIM + MEMORY_DIM,
+                ],
+            },
+            "padded_dim": 32,
+        },
         "source_fps": int(config["dataset"]["source_fps"]),
         "target_fps": int(config["dataset"]["target_fps"]),
         "action_horizon": int(config["training"]["action_horizon"]),
         "query_stride": int(config["memory_adapter"]["state_token"]["query_stride"]),
-        "execution_input_override": {"4": "item_1", "5": "item_2", "6": "item_3"},
+        "execution_input_override": {
+            "4": {"drawer_target": "item_1", "completed_layers": "chronological_execution_rank_minus_one"},
+            "5": {"drawer_target": "item_2", "completed_layers": "chronological_execution_rank_minus_one"},
+            "6": {"drawer_target": "item_3", "completed_layers": "chronological_execution_rank_minus_one"},
+        },
+        "progress_update": "completed_layers increments only at each chronological execution interval end",
+        "terminal_state": {"completed_layers": "completed_3", "drawer_target": "observe"},
         "forced_execution_memory_action_loss": "masked",
         "episodes": [
             {
@@ -642,7 +712,7 @@ def convert(
             shutil.rmtree(output_path)
 
     print(f"Tagged/valid episodes: {len(records)}; skipped: {len(skipped)}")
-    print("SM2SM: 30 Hz source -> 15 Hz LeRobot; action_horizon metadata=30")
+    print("S2M: 30 Hz source -> 15 Hz LeRobot; action_horizon metadata=30")
     dataset = _create_dataset(config, output_path)
     target_fps = int(config["dataset"]["target_fps"])
     query_stride = int(config["memory_adapter"]["state_token"]["query_stride"])
@@ -686,13 +756,15 @@ def convert(
         )
         dataset._video_frame_count = target_frame_count - 1  # noqa: SLF001
         for frame_index in range(target_frame_count - 1):
+            row_action = action[frame_index].copy()
+            row_action[:MASTER_ACTION_DIM] = action[frame_index + 1, :MASTER_ACTION_DIM]
             dataset.add_frame(
                 {
                     "face_view": dummy_image,
                     "left_wrist_view": dummy_image,
                     "right_wrist_view": dummy_image,
                     "state": state[frame_index],
-                    "actions": np.concatenate([action[frame_index + 1, :28], action[frame_index, 28:]], axis=0),
+                    "actions": row_action,
                     "key_state_input_ids": input_ids[frame_index],
                     "key_state_target_ids": target_ids[frame_index],
                     "key_state_target_mask": target_valid[frame_index],

@@ -3,7 +3,7 @@ memory_schema: ../memory_schemas/drawer_sorting_x1pro.yaml
 dataset:
   task: drawer_sorting
   source_dir: data/x1pro_table_clean
-  repo_id: drawer_sorting_x1pro_shared_memory_sm2sm_15hz
+  repo_id: drawer_sorting_x1pro_shared_memory_s2m_15hz_v2
   required_tag: drawer_sorting
   task_prompt: observe the drawers, then place each table item into the drawer containing the same item type
   source_fps: 30
@@ -11,27 +11,29 @@ dataset:
 
 state_layout:
   state_dim: 32
-  robot_dim: 28
+  mode: s2m
+  robot_state_dim: 14
+  robot_action_dim: 14
   slave_dim: 14
   master_dim: 14
-  availability_mask_dim: 31
 
 memory_adapter:
   type: shared
   full_state:
     encoding: implicit_unknown_one_hot
-    dim: [28, 31]
-    unknown_value: observe
+    fields:
+      completed_layers: {dim: [14, 17], zero_value: completed_0}
+      drawer_target: {dim: [17, 20], zero_value: observe}
   state_token:
     query_stride: 15
     serial_conditioning: teacher_forcing
 
 training:
   action_horizon: 30
-  state_history_size: 3
-  state_future_size: 3
+  state_history_size: 0
+  state_future_size: 0
   state_step: 1
-  latency_step: 3
+  latency_step: 0
   soft_action_boundary: true
   forced_execution_memory_action_loss: masked
   forced_execution_crossing_robot_action_loss: masked_from_unknown_boundary

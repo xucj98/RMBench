@@ -75,3 +75,28 @@ def test_x1pro_drawer_sorting_configs_share_dataset_and_timing_contract():
     assert full.policy_metadata["batch_id"] == serial.policy_metadata["batch_id"]
     assert full.policy_metadata["x2robot"]["source_fps"] == 30
     assert full.policy_metadata["x2robot"]["target_fps"] == 15
+
+
+def test_x1pro_drawer_sorting_v2_is_s2m_with_progress_and_no_state_sequence():
+    full = _config.get_config("pi05_x1pro_drawer_sorting_s2m_full_state")
+    serial = _config.get_config("pi05_x1pro_drawer_sorting_s2m_serial_soft")
+
+    assert full.data.repo_id == serial.data.repo_id == "drawer_sorting_x1pro_shared_memory_s2m_15hz_v2"
+    assert full.model.action_horizon == serial.model.action_horizon == 30
+    assert full.data.state_history_size == serial.data.state_history_size == 0
+    assert full.data.state_future_size == serial.data.state_future_size == 0
+    assert full.model.state_sequence_length == serial.model.state_sequence_length == 1
+    assert not full.model.pi05_state_sequence_in_suffix
+    assert not serial.model.pi05_state_sequence_in_suffix
+    assert full.data.robot_state_dim == serial.data.robot_state_dim == 14
+    assert full.data.memory_dim == serial.data.memory_dim == 6
+    assert full.data.memory_field_dims == serial.data.memory_field_dims == (3, 3)
+    assert serial.model.key_state_token_mode == "serial"
+    assert serial.model.key_state_num_values == (4, 4)
+    assert serial.model.key_state_initial_ids == (0, 0)
+    assert serial.model.key_state_allowed_transitions == (
+        ((0, 1), (1, 2), (2, 3), (3,)),
+        ((0, 1, 2, 3), (0, 1), (0, 2), (0, 3)),
+    )
+    assert full.policy_metadata["design_version"] == serial.policy_metadata["design_version"] == 2
+    assert full.policy_metadata["x2robot"]["mode"] == "s2m"
