@@ -1,0 +1,19 @@
+# Basic experiment configuration
+policy_name: DM05
+task_name: swap_blocks
+task_config: demo_clean_eval
+ckpt_setting: dm05_swap_blocks
+seed: 0
+instruction_type: unseen
+
+# OpenDM inference service
+base_url: http://127.0.0.1:7891/v1/infer
+robot_type: Aloha RoboTwin2
+action_horizon: 50
+request_timeout: 120
+
+# Evaluation logging
+eval_video_log: true
+eval_video_count: 5
+eval_video_key_state_overlay: false
+wandb_enabled: false
